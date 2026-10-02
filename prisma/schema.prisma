@@ -56,7 +56,8 @@ model User {
   updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(3)
 
   sessions           UserSession[]
-  purchases          Purchase[]
+  purchasesCreated   Purchase[]          @relation("PurchaseCreator")
+  purchasesReceived  Purchase[]          @relation("PurchaseReceiver")
   sales              Sale[]
   inventoryMovements InventoryMovement[]
   stockCounts        StockCount[]
@@ -65,14 +66,16 @@ model User {
 }
 
 model UserSession {
-  id               String    @id @default(uuid()) @db.Char(36)
-  userId           Int       @map("user_id")
-  refreshTokenHash String    @unique @map("refresh_token_hash") @db.Char(64)
-  expiresAt        DateTime  @map("expires_at") @db.DateTime(3)
-  revokedAt        DateTime? @map("revoked_at") @db.DateTime(3)
-  userAgent        String?   @map("user_agent") @db.VarChar(255)
-  ip               String?   @db.VarChar(64)
-  createdAt        DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  id                       String    @id @default(uuid()) @db.Char(36)
+  userId                   Int       @map("user_id")
+  refreshTokenHash         String    @unique @map("refresh_token_hash") @db.Char(64)
+  // Hash of the token this one replaced; presenting it again means a stolen/replayed token.
+  previousRefreshTokenHash String?   @unique @map("previous_refresh_token_hash") @db.Char(64)
+  expiresAt                DateTime  @map("expires_at") @db.DateTime(3)
+  revokedAt                DateTime? @map("revoked_at") @db.DateTime(3)
+  userAgent                String?   @map("user_agent") @db.VarChar(255)
+  ip                       String?   @db.VarChar(64)
+  createdAt                DateTime  @default(now()) @map("created_at") @db.DateTime(3)
 
   user User @relation(fields: [userId], references: [id])
 
@@ -168,11 +171,13 @@ model Purchase {
   updatedAt  DateTime       @updatedAt @map("updated_at") @db.DateTime(3)
 
   supplier Supplier       @relation(fields: [supplierId], references: [id])
-  creator  User           @relation(fields: [createdBy], references: [id])
+  creator  User           @relation("PurchaseCreator", fields: [createdBy], references: [id])
+  receiver User?          @relation("PurchaseReceiver", fields: [receivedBy], references: [id], onDelete: Restrict)
   items    PurchaseItem[]
 
   @@index([supplierId], map: "idx_purchases_supplier_id")
   @@index([createdBy], map: "idx_purchases_created_by")
+  @@index([receivedBy], map: "idx_purchases_received_by")
   @@index([status, createdAt], map: "idx_purchases_status_created_at")
   @@index([createdAt], map: "idx_purchases_created_at")
   @@map("purchases")
