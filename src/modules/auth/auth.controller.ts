@@ -1,0 +1,58 @@
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { FastifyRequest } from 'fastify';
+
+import {
+  AuthenticatedUser,
+  CurrentUser,
+  Public,
+  Roles,
+} from 'src/common/decorators/auth.decorators';
+import { PERMISSIONS } from 'src/common/permissions/permissions';
+
+import { AuthService, ClientMetadata } from './auth.service';
+import { AuthTokensView, LoginDto, RefreshTokenDto, SessionUserView } from './dto/auth.dto';
+import { LoginThrottle } from './login-throttle.decorator';
+
+function clientMetadata(request: FastifyRequest): ClientMetadata {
+  return { userAgent: request.headers['user-agent'], ip: request.ip };
+}
+
+@ApiTags('Auth')
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
+
+  /** Exchange username + password for an access token and a rotating refresh token. */
+  @Public()
+  @LoginThrottle()
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(@Body() dto: LoginDto, @Req() request: FastifyRequest): Promise<AuthTokensView> {
+    return this.authService.login(dto, clientMetadata(request));
+  }
+
+  /** Rotate the refresh token and get a new access token. */
+  @Public()
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(@Body() dto: RefreshTokenDto): Promise<AuthTokensView> {
+    return this.authService.refresh(dto);
+  }
+
+  /** Revoke the current session; the access token stops working immediately. */
+  @ApiBearerAuth()
+  @Roles(...PERMISSIONS.AUTHENTICATED)
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logout(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.authService.logout(user.sessionId);
+  }
+
+  @ApiBearerAuth()
+  @Roles(...PERMISSIONS.AUTHENTICATED)
+  @Get('me')
+  async me(@CurrentUser() user: AuthenticatedUser): Promise<SessionUserView> {
+    return this.authService.getProfile(user.id);
+  }
+}
