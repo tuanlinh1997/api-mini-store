@@ -1,14 +1,14 @@
 ---
 id: "007"
 title: "CI pipeline: lint, typecheck, unit and e2e tests with MySQL service"
-status: "todo"
+status: "done"
 area: "infra"
 agent: "@cicd-engineer"
 priority: "normal"
 created_at: "2026-10-02"
 due_date: null
-started_at: null
-completed_at: null
+started_at: "2026-10-02"
+completed_at: "2026-10-02"
 prd_refs: []
 blocks: []
 blocked_by: []
@@ -20,9 +20,9 @@ GitHub Actions workflow running `npm ci`, `npm run lint`, `npm run typecheck`, `
 
 ## Acceptance Criteria
 
-- [ ] Workflow runs on pull requests
-- [ ] MySQL 8 service with utf8mb4_unicode_ci
-- [ ] Branch protection requires it
+- [x] Workflow runs on pull requests (`.github/workflows/ci.yml`)
+- [x] MySQL 8 service with utf8mb4_unicode_ci (database created explicitly with that collation)
+- [ ] Branch protection requires it (manual repo setting: require checks `Lint and typecheck`, `Unit tests`, `Build`, `E2E tests (MySQL 8)`; optionally `Prisma migration drift check`)
 
 ## Technical Notes
 
@@ -33,3 +33,4 @@ E2E tests apply migrations themselves (global setup).
 | Date | Agent / Human | Event |
 |------|--------------|-------|
 | 2026-10-02 | @backend-developer | Task created |
+| 2026-10-02 | @cicd-engineer | Added ci.yml (lint/typecheck, unit+coverage, build, MySQL e2e, migration drift). Not yet run on GitHub; branch protection pending (human) |
