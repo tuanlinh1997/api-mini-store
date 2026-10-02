@@ -4,6 +4,8 @@ Backend REST API for the mini-supermarket management web app ("Quản lý siêu 
 
 **Stack**: NestJS 11 (Fastify adapter) · TypeScript (strict) · MySQL 8 · Prisma 6 · JWT + database sessions · Jest + supertest.
 
+**API docs (Vietnamese)**: what each endpoint is for, when and from which screen to call it, and who may call it: [`docs/backend/api_usage_guide.md`](docs/backend/api_usage_guide.md) · integration guide: [`docs/backend/api_integration_guide.md`](docs/backend/api_integration_guide.md).
+
 ## Quick start
 
 Requirements: Node 22+, npm 10+, MySQL 8.0.16+ (or `docker compose up -d mysql`).
@@ -19,7 +21,7 @@ npm run start:dev
 ```
 
 - API: `http://localhost:3000/api/v1` (health check: `GET /api/v1/health`)
-- Swagger UI: `http://localhost:3000/api/docs` · API contract for frontend: [`docs/backend/openapi.json`](docs/backend/openapi.json), [`docs/backend/api-types.ts`](docs/backend/api-types.ts), guide (Vietnamese): [`docs/backend/api_integration_guide.md`](docs/backend/api_integration_guide.md)
+- Swagger UI: `http://localhost:3000/api/docs` · API contract for frontend: [`docs/backend/openapi.json`](docs/backend/openapi.json), [`docs/backend/api-types.ts`](docs/backend/api-types.ts), integration guide (Vietnamese): [`docs/backend/api_integration_guide.md`](docs/backend/api_integration_guide.md) · what each API is for, when and from which screen to call it, who calls it: [`docs/backend/api_usage_guide.md`](docs/backend/api_usage_guide.md)
 - Seed logins: the admin from `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD`, plus `cashier` and `stockkeeper` with `SEED_DEMO_PASSWORD` (all values come from `.env`; use the example values only locally).
 
 ```bash

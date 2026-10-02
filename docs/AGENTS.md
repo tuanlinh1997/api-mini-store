@@ -9,7 +9,7 @@ All project documentation lives in this tree. Root-level exceptions: `README.md`
 | `docs/PRD.md` | Product requirements — **read-only without human approval** | Human |
 | `docs/architecture/` | System design, ADRs | @systems-architect |
 | `docs/frontend/` | Frontend architecture & conventions | @frontend-developer |
-| `docs/backend/` | Backend services, API reference, generated OpenAPI contract + TypeScript types, frontend integration guide (Vietnamese) | @backend-developer |
+| `docs/backend/` | Backend services, API reference, generated OpenAPI contract + TypeScript types, frontend integration guide and API purpose/usage guide (Vietnamese) | @backend-developer |
 | `docs/database/` | Schema, migrations, query patterns | @database-expert |
 | `docs/design/` | Design system, UX specs | @ui-ux-designer |
 | `docs/devops/` | Environments, pipeline, deployment, containers | @cicd-engineer (+ @docker-expert) |

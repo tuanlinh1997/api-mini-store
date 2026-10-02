@@ -11,6 +11,7 @@ Language: Vietnamese prose; code, field names, enums and error codes stay in Eng
 # Hướng dẫn tích hợp API cho Frontend
 
 > **Trạng thái**: Live (API v1)
+> **Mục đích và ngữ cảnh dùng từng API** (gọi khi nào, ở màn hình nào, ai gọi, thứ tự gọi, kịch bản end-to-end, truy vết SRS): [`api_usage_guide.md`](api_usage_guide.md)
 > **Nguồn sự thật của hợp đồng**: [`openapi.json`](openapi.json) (sinh tự động từ code) · kiểu TypeScript: [`api-types.ts`](api-types.ts) · mô tả bằng lời: [`API.md`](API.md)
 > **Cập nhật lần cuối**: 2026-10-02
 

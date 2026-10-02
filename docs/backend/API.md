@@ -16,6 +16,8 @@ Read by: @frontend-developer (to know what endpoints to call and their contracts
 > **Language**: all `message` values are Vietnamese; `code` values are stable and machine-readable
 > **Last updated**: 2026-10-02 (typed OpenAPI contract; response views aligned with the generated schemas)
 
+> **Purpose and usage (Vietnamese).** For what each endpoint is for, when and from which screen to call it, who may call it and the end-to-end scenarios, read [`api_usage_guide.md`](api_usage_guide.md); this file stays the contract reference.
+>
 > **Contract sources.** This file is the prose reference. The machine-readable contract is [`openapi.json`](openapi.json) (generated from the code, **the source of truth** for field names, types, enums, required/optional, roles and per-endpoint error codes) and its TypeScript form [`api-types.ts`](api-types.ts). Frontend developers: start with the Vietnamese [integration guide](api_integration_guide.md) (conventions, auth flow, business flows, error catalogue). Where this file and `openapi.json` ever differ, `openapi.json` wins (it is verified against real responses by `test/openapi-contract.e2e-spec.ts`); please fix this file. Regenerate with `npm run openapi:export`; `npm run openapi:check` fails when the committed files are stale.
 >
 > Response type names used below (`ProductResponse`, `SaleDetailResponse`, ...) are the schema names in `openapi.json` / `api-types.ts` (`components['schemas']['ProductResponse']`); request bodies and query objects are the `*Dto` schemas.

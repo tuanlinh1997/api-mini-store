@@ -114,6 +114,20 @@ describe('committed API contract', () => {
     expect(missing).toEqual([]);
   });
 
+  it('describes every operation in the API usage guide', () => {
+    const usageGuide = readFileSync(join(DOCS_DIRECTORY, 'api_usage_guide.md'), 'utf8');
+    const headings = new Set(
+      usageGuide
+        .split(/\r?\n/)
+        .filter((line) => line.startsWith('#### '))
+        .map((line) => line.slice('#### '.length).trim()),
+    );
+    const missing = operations
+      .map(({ method, path }) => `${method} ${path.replace('/api/v1', '')}`)
+      .filter((heading) => !headings.has(heading));
+    expect(missing).toEqual([]);
+  });
+
   it('explains every error code in the integration guide catalogue', () => {
     const missing = Object.values(ErrorCode).filter(
       (code) => !new RegExp(`\\| \`${code}\` \\|`).test(guide),
