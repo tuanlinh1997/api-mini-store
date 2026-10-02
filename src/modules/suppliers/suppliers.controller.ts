@@ -23,8 +23,11 @@ import {
   ApiEnvelopedController,
   ApiOkEnvelope,
   ApiPaginatedEnvelope,
+  ApiErrors,
 } from 'src/common/swagger/envelope.decorators';
 import { ResponseMessage } from 'src/common/decorators/response-message.decorator';
+import { ErrorCode } from 'src/common/errors/error-codes';
+import { SupplierResponse } from './dto/suppliers.response';
 
 @ApiTags('Suppliers')
 @ApiBearerAuth()
@@ -34,26 +37,32 @@ import { ResponseMessage } from 'src/common/decorators/response-message.decorato
 export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
-  @ApiPaginatedEnvelope({ status: 200 })
+  @ApiPaginatedEnvelope({ status: 200, model: SupplierResponse })
   @Get()
   async list(@Query() query: ListSuppliersQueryDto): Promise<Page<Supplier>> {
     return this.suppliersService.list(query);
   }
 
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: SupplierResponse })
+  @ApiErrors({
+    404: [ErrorCode.SUPPLIER_NOT_FOUND],
+  })
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number): Promise<Supplier> {
     return this.suppliersService.findOne(id);
   }
 
-  @ApiOkEnvelope({ status: 201 })
+  @ApiOkEnvelope({ status: 201, model: SupplierResponse })
   @ResponseMessage('Tạo nhà cung cấp thành công')
   @Post()
   async create(@Body() dto: CreateSupplierDto): Promise<Supplier> {
     return this.suppliersService.create(dto);
   }
 
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: SupplierResponse })
+  @ApiErrors({
+    404: [ErrorCode.SUPPLIER_NOT_FOUND],
+  })
   @ResponseMessage('Cập nhật nhà cung cấp thành công')
   @Patch(':id')
   async update(
@@ -63,7 +72,10 @@ export class SuppliersController {
     return this.suppliersService.update(id, dto);
   }
 
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: SupplierResponse })
+  @ApiErrors({
+    404: [ErrorCode.SUPPLIER_NOT_FOUND],
+  })
   @ResponseMessage('Ngừng sử dụng nhà cung cấp thành công')
   @Post(':id/deactivate')
   @HttpCode(HttpStatus.OK)
@@ -71,7 +83,10 @@ export class SuppliersController {
     return this.suppliersService.setActive(id, false);
   }
 
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: SupplierResponse })
+  @ApiErrors({
+    404: [ErrorCode.SUPPLIER_NOT_FOUND],
+  })
   @ResponseMessage('Kích hoạt lại nhà cung cấp thành công')
   @Post(':id/activate')
   @HttpCode(HttpStatus.OK)

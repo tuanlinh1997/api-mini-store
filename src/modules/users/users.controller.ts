@@ -28,8 +28,11 @@ import {
   ApiEnvelopedController,
   ApiOkEnvelope,
   ApiPaginatedEnvelope,
+  ApiErrors,
 } from 'src/common/swagger/envelope.decorators';
 import { ResponseMessage } from 'src/common/decorators/response-message.decorator';
+import { ErrorCode } from 'src/common/errors/error-codes';
+import { UserResponse } from './dto/users.response';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -39,26 +42,37 @@ import { ResponseMessage } from 'src/common/decorators/response-message.decorato
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @ApiPaginatedEnvelope({ status: 200 })
+  @ApiPaginatedEnvelope({ status: 200, model: UserResponse })
   @Get()
   async list(@Query() query: ListUsersQueryDto): Promise<Page<UserView>> {
     return this.usersService.list(query);
   }
 
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: UserResponse })
+  @ApiErrors({
+    404: [ErrorCode.USER_NOT_FOUND],
+  })
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number): Promise<UserView> {
     return this.usersService.findOne(id);
   }
 
-  @ApiOkEnvelope({ status: 201 })
+  @ApiOkEnvelope({ status: 201, model: UserResponse })
+  @ApiErrors({
+    409: [ErrorCode.DUPLICATE_VALUE],
+  })
   @ResponseMessage('Tạo người dùng thành công')
   @Post()
   async create(@Body() dto: CreateUserDto): Promise<UserView> {
     return this.usersService.create(dto);
   }
 
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: UserResponse })
+  @ApiErrors({
+    404: [ErrorCode.USER_NOT_FOUND],
+    409: [ErrorCode.LAST_ACTIVE_ADMIN, ErrorCode.TRANSACTION_CONFLICT],
+    503: [ErrorCode.TRANSACTION_TIMEOUT],
+  })
   @ResponseMessage('Cập nhật người dùng thành công')
   @Patch(':id')
   async update(
@@ -68,7 +82,12 @@ export class UsersController {
     return this.usersService.update(id, dto);
   }
 
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: UserResponse })
+  @ApiErrors({
+    404: [ErrorCode.USER_NOT_FOUND],
+    409: [ErrorCode.CANNOT_LOCK_SELF, ErrorCode.LAST_ACTIVE_ADMIN, ErrorCode.TRANSACTION_CONFLICT],
+    503: [ErrorCode.TRANSACTION_TIMEOUT],
+  })
   @ResponseMessage('Đã khóa tài khoản')
   @Post(':id/lock')
   @HttpCode(HttpStatus.OK)
@@ -79,7 +98,12 @@ export class UsersController {
     return this.usersService.setActive(id, false, actor.id);
   }
 
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: UserResponse })
+  @ApiErrors({
+    404: [ErrorCode.USER_NOT_FOUND],
+    409: [ErrorCode.TRANSACTION_CONFLICT],
+    503: [ErrorCode.TRANSACTION_TIMEOUT],
+  })
   @ResponseMessage('Đã mở khóa tài khoản')
   @Post(':id/unlock')
   @HttpCode(HttpStatus.OK)
@@ -91,6 +115,11 @@ export class UsersController {
   }
 
   @ApiOkEnvelope({ status: 200 })
+  @ApiErrors({
+    404: [ErrorCode.USER_NOT_FOUND],
+    409: [ErrorCode.TRANSACTION_CONFLICT],
+    503: [ErrorCode.TRANSACTION_TIMEOUT],
+  })
   @ResponseMessage('Đặt lại mật khẩu thành công')
   @Post(':id/reset-password')
   @HttpCode(HttpStatus.OK)

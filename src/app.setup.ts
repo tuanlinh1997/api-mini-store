@@ -2,13 +2,14 @@ import { randomUUID } from 'node:crypto';
 
 import { ConfigService } from '@nestjs/config';
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
 import helmet from '@fastify/helmet';
 import { FastifyRequest } from 'fastify';
 import { Logger } from 'nestjs-pino';
 
 import { createJsonBodyParser } from 'src/common/validation/json-body-parser';
 import { rememberRoute } from 'src/common/logging/logging.config';
+import { buildOpenApiDocument } from 'src/common/swagger/openapi-document';
 import { EnvironmentVariables } from 'src/config/environment';
 
 export const GLOBAL_PREFIX = 'api/v1';
@@ -109,14 +110,5 @@ function enableCors(app: NestFastifyApplication, rawOrigins: string): void {
 }
 
 function setupSwagger(app: NestFastifyApplication): void {
-  const document = SwaggerModule.createDocument(
-    app,
-    new DocumentBuilder()
-      .setTitle('Mini Store API')
-      .setDescription('Quản lý siêu thị mini - REST API. Xác thực bằng Bearer JWT.')
-      .setVersion('1.0')
-      .addBearerAuth()
-      .build(),
-  );
-  SwaggerModule.setup(SWAGGER_PATH, app, document);
+  SwaggerModule.setup(SWAGGER_PATH, app, buildOpenApiDocument(app));
 }

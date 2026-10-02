@@ -1,4 +1,10 @@
-import { createParamDecorator, ExecutionContext, SetMetadata } from '@nestjs/common';
+import {
+  applyDecorators,
+  createParamDecorator,
+  ExecutionContext,
+  SetMetadata,
+} from '@nestjs/common';
+import { ApiExtension } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { FastifyRequest } from 'fastify';
 
@@ -23,9 +29,12 @@ declare module 'fastify' {
 /** Marks a route as reachable without authentication (login, refresh, health). */
 export const Public = (): MethodDecorator & ClassDecorator => SetMetadata(IS_PUBLIC_KEY, true);
 
-/** Restricts a route to the given roles. Routes with neither @Public nor @Roles are denied. */
+/**
+ * Restricts a route to the given roles. Routes with neither @Public nor @Roles are denied.
+ * The roles are also published in the OpenAPI document as `x-roles`.
+ */
 export const Roles = (...roles: readonly Role[]): MethodDecorator & ClassDecorator =>
-  SetMetadata(ROLES_KEY, roles);
+  applyDecorators(SetMetadata(ROLES_KEY, roles), ApiExtension('x-roles', [...roles]));
 
 /** Injects the authenticated user (set by JwtAuthGuard) into a handler parameter. */
 export const CurrentUser = createParamDecorator(

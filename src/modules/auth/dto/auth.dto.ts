@@ -1,11 +1,14 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 export class LoginDto {
+  @ApiProperty({ maxLength: 50, example: 'cashier', description: 'Case-insensitive.' })
   @IsString({ message: 'Tên đăng nhập là bắt buộc' })
   @IsNotEmpty({ message: 'Tên đăng nhập là bắt buộc' })
   @MaxLength(50)
   username: string;
 
+  @ApiProperty({ maxLength: 128, format: 'password', example: 'your-password' })
   @IsString({ message: 'Mật khẩu là bắt buộc' })
   @IsNotEmpty({ message: 'Mật khẩu là bắt buộc' })
   @MaxLength(128)
@@ -13,6 +16,7 @@ export class LoginDto {
 }
 
 export class RefreshTokenDto {
+  @ApiProperty({ maxLength: 256, description: 'The latest refresh token. Single use.' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(256)

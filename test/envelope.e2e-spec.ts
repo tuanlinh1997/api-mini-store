@@ -1,4 +1,4 @@
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { buildOpenApiDocument } from 'src/common/swagger/openapi-document';
 
 import { bearer, bootTestContext, createProduct, TestContext } from './helpers/test-app';
 
@@ -95,15 +95,16 @@ describe('Response envelope (e2e)', () => {
     expect(forbidden.body).toMatchObject({ success: false, code: 'FORBIDDEN', data: null });
   });
 
-  it('documents the envelope in the OpenAPI document', () => {
-    const document = SwaggerModule.createDocument(context.app, new DocumentBuilder().build());
+  it('documents the envelope with a typed data schema in the OpenAPI document', () => {
+    const document = buildOpenApiDocument(context.app);
     expect(Object.keys(document.components?.schemas ?? {})).toEqual(
-      expect.arrayContaining(['SuccessEnvelopeDto', 'ErrorEnvelopeDto', 'PageMetaDto']),
+      expect.arrayContaining(['ErrorEnvelopeDto', 'PageMetaDto', 'SaleDetailResponse']),
     );
-    const checkout = document.paths['/api/v1/sales']?.post?.responses['201'];
-    expect(JSON.stringify(checkout)).toContain('SuccessEnvelopeDto');
-    const list = document.paths['/api/v1/products']?.get?.responses['200'];
-    expect(JSON.stringify(list)).toContain('PageMetaDto');
+    const checkout = JSON.stringify(document.paths['/api/v1/sales']?.post?.responses['201']);
+    expect(checkout).toContain('"$ref":"#/components/schemas/SaleDetailResponse"');
+    const list = JSON.stringify(document.paths['/api/v1/products']?.get?.responses['200']);
+    expect(list).toContain('"$ref":"#/components/schemas/PageMetaDto"');
+    expect(list).toContain('"$ref":"#/components/schemas/ProductResponse"');
   });
 
   describe('framework-level errors', () => {

@@ -27,8 +27,11 @@ import {
   ApiEnvelopedController,
   ApiOkEnvelope,
   ApiPaginatedEnvelope,
+  ApiErrors,
 } from 'src/common/swagger/envelope.decorators';
 import { ResponseMessage } from 'src/common/decorators/response-message.decorator';
+import { ErrorCode } from 'src/common/errors/error-codes';
+import { ProductResponse } from './dto/products.response';
 
 @ApiTags('Products')
 @ApiBearerAuth()
@@ -38,7 +41,7 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Roles(...PERMISSIONS.CATALOG_READ)
-  @ApiPaginatedEnvelope({ status: 200 })
+  @ApiPaginatedEnvelope({ status: 200, model: ProductResponse })
   @Get()
   async list(
     @Query() query: ListProductsQueryDto,
@@ -49,7 +52,10 @@ export class ProductsController {
 
   /** Declared before `:id` so "lookup" is not parsed as an id. */
   @Roles(...PERMISSIONS.CATALOG_READ)
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: ProductResponse })
+  @ApiErrors({
+    404: [ErrorCode.PRODUCT_NOT_FOUND],
+  })
   @Get('lookup')
   async lookup(
     @Query() query: LookupProductQueryDto,
@@ -59,7 +65,10 @@ export class ProductsController {
   }
 
   @Roles(...PERMISSIONS.CATALOG_READ)
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: ProductResponse })
+  @ApiErrors({
+    404: [ErrorCode.PRODUCT_NOT_FOUND],
+  })
   @Get(':id')
   async findOne(
     @Param('id', ParseIntPipe) id: number,
@@ -69,7 +78,11 @@ export class ProductsController {
   }
 
   @Roles(...PERMISSIONS.CATALOG_WRITE)
-  @ApiOkEnvelope({ status: 201 })
+  @ApiOkEnvelope({ status: 201, model: ProductResponse })
+  @ApiErrors({
+    409: [ErrorCode.DUPLICATE_VALUE],
+    422: [ErrorCode.CATEGORY_NOT_FOUND, ErrorCode.CATEGORY_INACTIVE],
+  })
   @ResponseMessage('Tạo sản phẩm thành công')
   @Post()
   async create(
@@ -80,7 +93,12 @@ export class ProductsController {
   }
 
   @Roles(...PERMISSIONS.CATALOG_WRITE)
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: ProductResponse })
+  @ApiErrors({
+    404: [ErrorCode.PRODUCT_NOT_FOUND],
+    409: [ErrorCode.DUPLICATE_VALUE],
+    422: [ErrorCode.CATEGORY_NOT_FOUND, ErrorCode.CATEGORY_INACTIVE],
+  })
   @ResponseMessage('Cập nhật sản phẩm thành công')
   @Patch(':id')
   async update(
@@ -92,7 +110,10 @@ export class ProductsController {
   }
 
   @Roles(...PERMISSIONS.CATALOG_WRITE)
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: ProductResponse })
+  @ApiErrors({
+    404: [ErrorCode.PRODUCT_NOT_FOUND],
+  })
   @ResponseMessage('Ngừng sử dụng sản phẩm thành công')
   @Post(':id/deactivate')
   @HttpCode(HttpStatus.OK)
@@ -104,7 +125,10 @@ export class ProductsController {
   }
 
   @Roles(...PERMISSIONS.CATALOG_WRITE)
-  @ApiOkEnvelope({ status: 200 })
+  @ApiOkEnvelope({ status: 200, model: ProductResponse })
+  @ApiErrors({
+    404: [ErrorCode.PRODUCT_NOT_FOUND],
+  })
   @ResponseMessage('Kích hoạt lại sản phẩm thành công')
   @Post(':id/activate')
   @HttpCode(HttpStatus.OK)
