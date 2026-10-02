@@ -1,4 +1,4 @@
-import { bearer, bootTestContext, createProduct, TestContext } from './helpers/test-app';
+import { bearer, bootTestContext, createProduct, TestContext, unwrap } from './helpers/test-app';
 
 describe('Catalog, customers and users (e2e)', () => {
   let context: TestContext;
@@ -19,13 +19,13 @@ describe('Catalog, customers and users (e2e)', () => {
     method: 'get' | 'post' | 'patch',
     path: string,
     payload?: Record<string, unknown>,
-  ): Promise<{ status: number; body: Record<string, unknown> }> {
+  ): Promise<{ status: number; body: Record<string, unknown>; meta?: Record<string, unknown> }> {
     const request = context
       .http()
       [method](`/api/v1${path}`)
       .set('Authorization', await bearer(context, username));
     const response = payload ? await request.send(payload) : await request;
-    return { status: response.status, body: response.body };
+    return { status: response.status, body: unwrap(response.body), meta: response.body.meta };
   }
 
   describe('products', () => {
@@ -135,7 +135,7 @@ describe('Catalog, customers and users (e2e)', () => {
         `/products?search=SCAN&isActive=true&pageSize=1&page=1`,
       );
       expect(response.status).toBe(200);
-      expect(response.body.meta).toMatchObject({ page: 1, pageSize: 1, total: 1 });
+      expect(response.meta).toMatchObject({ page: 1, pageSize: 1, total: 1 });
       const tooBig = await send('cashier', 'get', '/products?pageSize=101');
       expect(tooBig.status).toBe(400);
     });
@@ -178,7 +178,7 @@ describe('Catalog, customers and users (e2e)', () => {
         (await send('cashier', 'get', '/customers/lookup?q=%2B84901234567')).body.fullName,
       ).toBe('An');
       expect((await send('cashier', 'get', '/customers/lookup?q=0900000000')).status).toBe(404);
-      expect((await send('cashier', 'get', '/customers?search=An')).body.meta).toMatchObject({
+      expect((await send('cashier', 'get', '/customers?search=An')).meta).toMatchObject({
         total: 1,
       });
     });
@@ -248,7 +248,7 @@ describe('Catalog, customers and users (e2e)', () => {
           .post('/api/v1/auth/login')
           .send({ username: 'admin2', password: 'a-long-enough-password' })
           .expect(200)
-      ).body.accessToken as string;
+      ).body.data.accessToken as string;
       const lastAdmin = await context
         .http()
         .patch(`/api/v1/users/${secondId}`)
@@ -266,13 +266,13 @@ describe('Catalog, customers and users (e2e)', () => {
           .post('/api/v1/auth/login')
           .send({ username: 'admin2', password: 'a-long-enough-password' })
           .expect(200)
-      ).body.accessToken as string;
+      ).body.data.accessToken as string;
       await context
         .http()
         .post(`/api/v1/users/${context.users.stockkeeper.id}/reset-password`)
         .set('Authorization', `Bearer ${secondToken}`)
         .send({ newPassword: 'brand-new-password-1' })
-        .expect(204);
+        .expect(200);
       await context
         .http()
         .get('/api/v1/auth/me')

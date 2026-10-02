@@ -1,4 +1,11 @@
-import { bearer, bootTestContext, createProduct, stockOf, TestContext } from './helpers/test-app';
+import {
+  bearer,
+  bootTestContext,
+  createProduct,
+  stockOf,
+  TestContext,
+  unwrap,
+} from './helpers/test-app';
 
 interface SaleBody {
   id: number;
@@ -37,7 +44,7 @@ describe('POS checkout (e2e)', () => {
       .post('/api/v1/sales')
       .set('Authorization', await bearer(context, username))
       .send(payload);
-    return { status: response.status, body: response.body };
+    return { status: response.status, body: unwrap(response.body) };
   }
 
   async function movementCount(): Promise<number> {
@@ -125,7 +132,7 @@ describe('POS checkout (e2e)', () => {
       .get(`/api/v1/sales/${body.id}`)
       .set('Authorization', await bearer(context, 'admin'))
       .expect(200);
-    expect(detail.body.items[0]).toMatchObject({ unitPrice: 8000, unitCostSnapshot: 5000 });
+    expect(detail.body.data.items[0]).toMatchObject({ unitPrice: 8000, unitCostSnapshot: 5000 });
   });
 
   it('generates sequential invoice numbers', async () => {
@@ -296,7 +303,7 @@ describe('POS checkout (e2e)', () => {
         .set('Authorization', auth)
         .expect(200);
 
-      expect(first.body).toMatchObject({
+      expect(first.body.data).toMatchObject({
         store: { name: 'Test Store' },
         invoiceNo: body.invoiceNo,
         total: 24000,
@@ -304,13 +311,13 @@ describe('POS checkout (e2e)', () => {
         customer: null,
         pointsEarned: 0,
       });
-      expect(first.body.items[0]).toMatchObject({
+      expect(first.body.data.items[0]).toMatchObject({
         name: 'Receipt item',
         quantity: 2,
         lineTotal: 24000,
       });
-      expect(first.body.payments[0]).toMatchObject({ method: 'CASH', changeAmount: 6000 });
-      expect(second.body).toEqual(first.body);
+      expect(first.body.data.payments[0]).toMatchObject({ method: 'CASH', changeAmount: 6000 });
+      expect(second.body.data).toEqual(first.body.data);
       expect(await context.prisma.sale.count()).toBe(salesBefore);
     });
 
@@ -320,7 +327,7 @@ describe('POS checkout (e2e)', () => {
         .get('/api/v1/sales?search=HD&pageSize=2&page=1')
         .set('Authorization', await bearer(context, 'cashier'))
         .expect(200);
-      expect(response.body.items.length).toBeLessThanOrEqual(2);
+      expect(response.body.data.length).toBeLessThanOrEqual(2);
       expect(response.body.meta).toMatchObject({ page: 1, pageSize: 2 });
       expect(response.body.meta.total).toBeGreaterThan(0);
     });

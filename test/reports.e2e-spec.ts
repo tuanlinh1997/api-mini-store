@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
 import type { Response } from 'supertest';
 
-import { bearer, bootTestContext, createProduct, TestContext } from './helpers/test-app';
+import { bearer, bootTestContext, createProduct, TestContext, unwrap } from './helpers/test-app';
 
 const STORE_ZONE = 'Asia/Ho_Chi_Minh';
 
@@ -62,7 +62,7 @@ describe('Reports (e2e)', () => {
       .http()
       .get(`/api/v1/reports${path}`)
       .set('Authorization', await bearer(context, username));
-    return { status: response.status, body: response.body };
+    return { status: response.status, body: unwrap(response.body) };
   }
 
   it('revenue: aggregates invoices, gross sales, discount and net revenue per day with totals', async () => {

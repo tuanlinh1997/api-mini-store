@@ -24,29 +24,42 @@ import {
   UserView,
 } from './dto/users.dto';
 import { UsersService } from './users.service';
+import {
+  ApiEnvelopedController,
+  ApiOkEnvelope,
+  ApiPaginatedEnvelope,
+} from 'src/common/swagger/envelope.decorators';
+import { ResponseMessage } from 'src/common/decorators/response-message.decorator';
 
 @ApiTags('Users')
 @ApiBearerAuth()
 @Roles(...PERMISSIONS.USERS_MANAGE)
+@ApiEnvelopedController()
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  @ApiPaginatedEnvelope({ status: 200 })
   @Get()
   async list(@Query() query: ListUsersQueryDto): Promise<Page<UserView>> {
     return this.usersService.list(query);
   }
 
+  @ApiOkEnvelope({ status: 200 })
   @Get(':id')
   async findOne(@Param('id', ParseIntPipe) id: number): Promise<UserView> {
     return this.usersService.findOne(id);
   }
 
+  @ApiOkEnvelope({ status: 201 })
+  @ResponseMessage('Tạo người dùng thành công')
   @Post()
   async create(@Body() dto: CreateUserDto): Promise<UserView> {
     return this.usersService.create(dto);
   }
 
+  @ApiOkEnvelope({ status: 200 })
+  @ResponseMessage('Cập nhật người dùng thành công')
   @Patch(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -55,6 +68,8 @@ export class UsersController {
     return this.usersService.update(id, dto);
   }
 
+  @ApiOkEnvelope({ status: 200 })
+  @ResponseMessage('Đã khóa tài khoản')
   @Post(':id/lock')
   @HttpCode(HttpStatus.OK)
   async lock(
@@ -64,6 +79,8 @@ export class UsersController {
     return this.usersService.setActive(id, false, actor.id);
   }
 
+  @ApiOkEnvelope({ status: 200 })
+  @ResponseMessage('Đã mở khóa tài khoản')
   @Post(':id/unlock')
   @HttpCode(HttpStatus.OK)
   async unlock(
@@ -73,8 +90,10 @@ export class UsersController {
     return this.usersService.setActive(id, true, actor.id);
   }
 
+  @ApiOkEnvelope({ status: 200 })
+  @ResponseMessage('Đặt lại mật khẩu thành công')
   @Post(':id/reset-password')
-  @HttpCode(HttpStatus.NO_CONTENT)
+  @HttpCode(HttpStatus.OK)
   async resetPassword(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ResetPasswordDto,

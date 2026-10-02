@@ -1,4 +1,11 @@
-import { bearer, bootTestContext, createProduct, stockOf, TestContext } from './helpers/test-app';
+import {
+  bearer,
+  bootTestContext,
+  createProduct,
+  stockOf,
+  TestContext,
+  unwrap,
+} from './helpers/test-app';
 
 interface CountResponse {
   code?: string;
@@ -34,7 +41,7 @@ describe('Stock counts (e2e)', () => {
       .post('/api/v1/inventory/stock-counts')
       .set('Authorization', await bearer(context, username))
       .send(payload);
-    return { status: response.status, body: response.body };
+    return { status: response.status, body: unwrap(response.body) };
   }
 
   it('records the count, an ADJUSTMENT movement with the signed difference and the new stock', async () => {
@@ -168,6 +175,6 @@ describe('Stock counts (e2e)', () => {
       .set('Authorization', await bearer(context, 'stockkeeper'))
       .expect(200);
     expect(list.body.meta.total).toBeGreaterThan(0);
-    expect(list.body.items[0]).toHaveProperty('countNo');
+    expect(list.body.data[0]).toHaveProperty('countNo');
   });
 });

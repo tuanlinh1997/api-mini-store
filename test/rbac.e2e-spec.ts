@@ -104,7 +104,7 @@ describe('RBAC (e2e)', () => {
       .get(`/api/v1/products/${product.id}`)
       .set('Authorization', await bearer(context, 'stockkeeper'))
       .expect(200);
-    expect(forCashier.body).not.toHaveProperty('costPrice');
-    expect(forStockkeeper.body.costPrice).toBe(777);
+    expect(forCashier.body.data).not.toHaveProperty('costPrice');
+    expect(forStockkeeper.body.data.costPrice).toBe(777);
   });
 });

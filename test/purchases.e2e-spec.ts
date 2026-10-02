@@ -5,6 +5,7 @@ import {
   createSupplier,
   stockOf,
   TestContext,
+  unwrap,
 } from './helpers/test-app';
 
 interface PurchaseBody {
@@ -37,7 +38,7 @@ describe('Purchases (e2e)', () => {
       .post(`/api/v1${path}`)
       .set('Authorization', await bearer(context, username))
       .send(payload);
-    return { status: response.status, body: response.body };
+    return { status: response.status, body: unwrap(response.body) };
   }
 
   async function createDraft(
@@ -172,7 +173,7 @@ describe('Purchases (e2e)', () => {
       .set('Authorization', await bearer(context, 'stockkeeper'))
       .send({ items: [{ productId: product.id, quantity: 3, unitCost: 150 }], note: 'edited' })
       .expect(200);
-    expect(patched.body).toMatchObject({ total: 450, note: 'edited' });
+    expect(patched.body.data).toMatchObject({ total: 450, note: 'edited' });
 
     expect((await post('stockkeeper', `/purchases/${draft.id}/cancel`)).body.status).toBe(
       'CANCELLED',

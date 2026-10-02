@@ -6,7 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AllExceptionsFilter } from 'src/common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
-import { DecimalSerializerInterceptor } from 'src/common/interceptors/decimal-serializer.interceptor';
+import { ResponseEnvelopeInterceptor } from 'src/common/interceptors/response-envelope.interceptor';
 import { SequencesModule } from 'src/common/sequences/sequences.module';
 import { createValidationPipe } from 'src/common/validation/validation';
 import { EnvironmentVariables, validateEnvironment } from 'src/config/environment';
@@ -75,7 +75,7 @@ function isNotLoginRoute(context: ExecutionContext): boolean {
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_PIPE, useFactory: createValidationPipe },
-    { provide: APP_INTERCEPTOR, useClass: DecimalSerializerInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: ResponseEnvelopeInterceptor },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })

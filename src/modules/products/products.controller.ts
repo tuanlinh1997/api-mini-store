@@ -23,14 +23,22 @@ import {
   UpdateProductDto,
 } from './dto/products.dto';
 import { ProductsService, ProductView } from './products.service';
+import {
+  ApiEnvelopedController,
+  ApiOkEnvelope,
+  ApiPaginatedEnvelope,
+} from 'src/common/swagger/envelope.decorators';
+import { ResponseMessage } from 'src/common/decorators/response-message.decorator';
 
 @ApiTags('Products')
 @ApiBearerAuth()
+@ApiEnvelopedController()
 @Controller('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Roles(...PERMISSIONS.CATALOG_READ)
+  @ApiPaginatedEnvelope({ status: 200 })
   @Get()
   async list(
     @Query() query: ListProductsQueryDto,
@@ -41,6 +49,7 @@ export class ProductsController {
 
   /** Declared before `:id` so "lookup" is not parsed as an id. */
   @Roles(...PERMISSIONS.CATALOG_READ)
+  @ApiOkEnvelope({ status: 200 })
   @Get('lookup')
   async lookup(
     @Query() query: LookupProductQueryDto,
@@ -50,6 +59,7 @@ export class ProductsController {
   }
 
   @Roles(...PERMISSIONS.CATALOG_READ)
+  @ApiOkEnvelope({ status: 200 })
   @Get(':id')
   async findOne(
     @Param('id', ParseIntPipe) id: number,
@@ -59,6 +69,8 @@ export class ProductsController {
   }
 
   @Roles(...PERMISSIONS.CATALOG_WRITE)
+  @ApiOkEnvelope({ status: 201 })
+  @ResponseMessage('Tạo sản phẩm thành công')
   @Post()
   async create(
     @Body() dto: CreateProductDto,
@@ -68,6 +80,8 @@ export class ProductsController {
   }
 
   @Roles(...PERMISSIONS.CATALOG_WRITE)
+  @ApiOkEnvelope({ status: 200 })
+  @ResponseMessage('Cập nhật sản phẩm thành công')
   @Patch(':id')
   async update(
     @Param('id', ParseIntPipe) id: number,
@@ -78,6 +92,8 @@ export class ProductsController {
   }
 
   @Roles(...PERMISSIONS.CATALOG_WRITE)
+  @ApiOkEnvelope({ status: 200 })
+  @ResponseMessage('Ngừng sử dụng sản phẩm thành công')
   @Post(':id/deactivate')
   @HttpCode(HttpStatus.OK)
   async deactivate(
@@ -88,6 +104,8 @@ export class ProductsController {
   }
 
   @Roles(...PERMISSIONS.CATALOG_WRITE)
+  @ApiOkEnvelope({ status: 200 })
+  @ResponseMessage('Kích hoạt lại sản phẩm thành công')
   @Post(':id/activate')
   @HttpCode(HttpStatus.OK)
   async activate(

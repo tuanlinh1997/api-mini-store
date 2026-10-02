@@ -2,11 +2,17 @@ import { Test } from '@nestjs/testing';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Prisma, Role } from '@prisma/client';
 import request from 'supertest';
+import type { Response } from 'supertest';
 
 import { AppModule } from 'src/app.module';
 import { configureApplication, generateRequestId } from 'src/app.setup';
 import { PasswordService } from 'src/modules/auth/password.service';
 import { PrismaService } from 'src/prisma/prisma.service';
+
+/** Success envelopes carry the payload in `data`; error envelopes are returned as they are. */
+export function unwrap(body: Response['body']): Response['body'] {
+  return body?.success === true ? body.data : body;
+}
 
 export const TEST_PASSWORD = 'Passw0rd-for-tests';
 
@@ -96,7 +102,7 @@ export async function bootTestContext(): Promise<TestContext> {
       .post('/api/v1/auth/login')
       .send({ username, password: TEST_PASSWORD })
       .expect(200);
-    const token = (response.body as { accessToken: string }).accessToken;
+    const token = (response.body as { data: { accessToken: string } }).data.accessToken;
     tokens.set(username, token);
     return token;
   };

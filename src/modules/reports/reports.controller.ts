@@ -16,32 +16,38 @@ import {
   RevenueReport,
   TopProductsReport,
 } from './reports.service';
+import { ApiEnvelopedController, ApiOkEnvelope } from 'src/common/swagger/envelope.decorators';
 
 @ApiTags('Reports')
 @ApiBearerAuth()
+@ApiEnvelopedController()
 @Controller('reports')
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Roles(...PERMISSIONS.REPORTS_SALES)
+  @ApiOkEnvelope({ status: 200 })
   @Get('revenue')
   async revenue(@Query() query: PeriodReportQueryDto): Promise<RevenueReport> {
     return this.reportsService.revenue(query);
   }
 
   @Roles(...PERMISSIONS.REPORTS_SALES)
+  @ApiOkEnvelope({ status: 200 })
   @Get('top-products')
   async topProducts(@Query() query: TopProductsQueryDto): Promise<TopProductsReport> {
     return this.reportsService.topProducts(query);
   }
 
   @Roles(...PERMISSIONS.REPORTS_SALES)
+  @ApiOkEnvelope({ status: 200 })
   @Get('gross-profit')
   async grossProfit(@Query() query: PeriodReportQueryDto): Promise<GrossProfitReport> {
     return this.reportsService.grossProfit(query);
   }
 
   @Roles(...PERMISSIONS.REPORTS_INVENTORY)
+  @ApiOkEnvelope({ status: 200 })
   @Get('inventory')
   async inventory(@Query() query: InventoryReportQueryDto): Promise<InventoryReport> {
     return this.reportsService.inventory(query);

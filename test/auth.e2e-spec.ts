@@ -21,7 +21,7 @@ describe('Auth (e2e)', () => {
   async function login(username: string, password = TEST_PASSWORD): Promise<LoginBody> {
     const response = await context.http().post('/api/v1/auth/login').send({ username, password });
     expect(response.status).toBe(200);
-    return response.body as LoginBody;
+    return (response.body as { data: LoginBody }).data;
   }
 
   it('logs in and returns tokens plus the profile; GET /auth/me works with the token', async () => {
@@ -34,7 +34,7 @@ describe('Auth (e2e)', () => {
       .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${body.accessToken}`)
       .expect(200);
-    expect(me.body).toMatchObject({ username: 'cashier', role: 'CASHIER' });
+    expect(me.body.data).toMatchObject({ username: 'cashier', role: 'CASHIER' });
   });
 
   it('stores only a hash of the refresh token', async () => {
@@ -89,7 +89,7 @@ describe('Auth (e2e)', () => {
   it('logout revokes the session immediately', async () => {
     const body = await login('stockkeeper');
     const auth = `Bearer ${body.accessToken}`;
-    await context.http().post('/api/v1/auth/logout').set('Authorization', auth).expect(204);
+    await context.http().post('/api/v1/auth/logout').set('Authorization', auth).expect(200);
     const after = await context.http().get('/api/v1/auth/me').set('Authorization', auth);
     expect(after.status).toBe(401);
     await context
@@ -106,7 +106,7 @@ describe('Auth (e2e)', () => {
       .post('/api/v1/auth/refresh')
       .send({ refreshToken: first.refreshToken })
       .expect(200);
-    const second = rotated.body as LoginBody;
+    const second = (rotated.body as { data: LoginBody }).data;
     expect(second.refreshToken).not.toBe(first.refreshToken);
 
     await context

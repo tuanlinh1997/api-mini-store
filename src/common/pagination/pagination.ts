@@ -27,15 +27,23 @@ export interface PageMeta {
   total: number;
 }
 
-export interface Page<T> {
-  items: T[];
-  meta: PageMeta;
+/**
+ * Explicit marker for list results: the response interceptor maps it to the envelope's
+ * `data` (items) and `meta` (pagination). Plain objects with an `items` key are NOT treated as pages.
+ */
+export class Paginated<T> {
+  constructor(
+    readonly items: T[],
+    readonly meta: PageMeta,
+  ) {}
 }
+
+export type Page<T> = Paginated<T>;
 
 export function toSkipTake(query: PaginationQueryDto): { skip: number; take: number } {
   return { skip: (query.page - 1) * query.pageSize, take: query.pageSize };
 }
 
 export function buildPage<T>(items: T[], total: number, query: PaginationQueryDto): Page<T> {
-  return { items, meta: { page: query.page, pageSize: query.pageSize, total } };
+  return new Paginated(items, { page: query.page, pageSize: query.pageSize, total });
 }
