@@ -12,7 +12,7 @@
     "start": "node --enable-source-maps dist/main.js",
     "start:dev": "nest start --watch",
     "start:prod": "node --enable-source-maps dist/main.js",
-    "lint": "eslint \"{src,test,prisma}/**/*.ts\"",
+    "lint": "eslint \"{src,test,prisma,scripts}/**/*.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest",
     "test:cov": "jest --coverage",
@@ -22,7 +22,10 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "prisma db seed",
     "seed:demo": "ts-node -r tsconfig-paths/register --transpile-only prisma/seed-demo.ts",
-    "seed:demo:verify": "ts-node -r tsconfig-paths/register --transpile-only prisma/verify-demo.ts"
+    "seed:demo:verify": "ts-node -r tsconfig-paths/register --transpile-only prisma/verify-demo.ts",
+    "db:backup": "ts-node --transpile-only scripts/db-backup.ts",
+    "db:restore": "ts-node --transpile-only scripts/db-restore.ts",
+    "db:compare": "ts-node --transpile-only scripts/db-compare.ts"
   },
   "prisma": {
     "seed": "ts-node -r tsconfig-paths/register --transpile-only prisma/seed.ts"

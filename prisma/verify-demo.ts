@@ -1,6 +1,9 @@
 /* Consistency checks for demo data (`npm run seed:demo:verify`). Prints PASS/FAIL per check
- * and exits with code 1 if any check fails. Read-only. */
+ * and exits with code 1 if any check fails. Read-only.
+ * Target another database with `--database-url=mysql://...` or VERIFY_DATABASE_URL. */
 import 'dotenv/config';
+
+import { parseArgs } from 'node:util';
 
 import { PrismaClient } from '@prisma/client';
 
@@ -168,7 +171,10 @@ const CHECKS: Check[] = [
 ];
 
 async function main(): Promise<void> {
-  const prisma = new PrismaClient();
+  // Optional override so the same checks can run against a restored copy of the database.
+  const { values } = parseArgs({ options: { 'database-url': { type: 'string' } } });
+  const databaseUrl = values['database-url'] ?? process.env.VERIFY_DATABASE_URL;
+  const prisma = new PrismaClient(databaseUrl ? { datasourceUrl: databaseUrl } : undefined);
   let failures = 0;
   try {
     for (const check of CHECKS) {

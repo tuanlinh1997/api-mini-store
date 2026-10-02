@@ -17,7 +17,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['prisma/**/*.ts', 'test/**/*.ts'],
+    files: ['prisma/**/*.ts', 'test/**/*.ts', 'scripts/**/*.ts'],
     rules: { 'no-console': 'off' },
   },
 );

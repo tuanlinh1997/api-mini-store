@@ -12,6 +12,9 @@ coverage/
 *.tsbuildinfo
 npm-debug.log*
 
+# Database backups (contain real data)
+backups/
+
 # Environment (never commit secrets)
 .env
 .env.*
