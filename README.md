@@ -12,7 +12,9 @@ Requirements: Node 22+, npm 10+, MySQL 8.0.16+ (or `docker compose up -d mysql`)
 npm install
 cp .env.example .env            # set DATABASE_URL and a strong JWT_ACCESS_SECRET
 npx prisma migrate deploy       # create the schema
-npm run prisma:seed             # admin + demo users and sample data
+npm run prisma:seed             # admin + demo users and a small sample catalog
+# optional: ~90 days of realistic data in every table (dev database only)
+npm run seed:demo -- --reset && npm run seed:demo:verify
 npm run start:dev
 ```
 
@@ -37,7 +39,9 @@ curl -s -X POST http://localhost:3000/api/v1/auth/login \
 | `npm run test:e2e` | E2E tests against a real MySQL database `mini_store_test` (migrations applied automatically; override with `TEST_DATABASE_URL`, name must end with `_test`) |
 | `npm run prisma:migrate` | Create/apply a migration during development |
 | `npm run prisma:deploy` | Apply committed migrations |
-| `npm run prisma:seed` | Seed demo data (idempotent) |
+| `npm run prisma:seed` | Base seed: users and a small catalog (idempotent) |
+| `npm run seed:demo -- --reset` | Fill every table with ~90 days of consistent demo data (dev DB only; refuses production/test DBs) |
+| `npm run seed:demo:verify` | 24 PASS/FAIL consistency checks on the demo data |
 
 Create the databases once: `CREATE DATABASE mini_store CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;` and the same for `mini_store_test`. `docker-compose.yml` provides an optional MySQL 8 service (`mini_store` is created automatically).
 

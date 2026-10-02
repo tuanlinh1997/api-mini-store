@@ -20,7 +20,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "seed:demo": "ts-node -r tsconfig-paths/register --transpile-only prisma/seed-demo.ts",
+    "seed:demo:verify": "ts-node -r tsconfig-paths/register --transpile-only prisma/verify-demo.ts"
   },
   "prisma": {
     "seed": "ts-node -r tsconfig-paths/register --transpile-only prisma/seed.ts"

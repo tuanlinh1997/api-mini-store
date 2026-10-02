@@ -5,7 +5,7 @@ import 'dotenv/config';
 import 'reflect-metadata';
 
 import { NestFactory } from '@nestjs/core';
-import { Role } from '@prisma/client';
+import { PrismaClient, Role } from '@prisma/client';
 
 import { AppModule } from 'src/app.module';
 import { AuthenticatedUser } from 'src/common/decorators/auth.decorators';
@@ -194,8 +194,8 @@ function requireEnv(name: string, minLength = 1): string {
   return value;
 }
 
-async function seedUsers(
-  prisma: PrismaService,
+export async function seedUsers(
+  prisma: PrismaClient,
   passwords: PasswordService,
 ): Promise<AuthenticatedUser> {
   const adminUsername = requireEnv('SEED_ADMIN_USERNAME').toLowerCase();
@@ -338,7 +338,10 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exit(1);
-});
+// Only run when executed directly (`prisma db seed`), not when imported by the demo seed.
+if (require.main === module) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
