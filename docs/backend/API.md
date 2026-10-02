@@ -14,7 +14,11 @@ Read by: @frontend-developer (to know what endpoints to call and their contracts
 > **Content-Type**: `application/json` for all requests and responses
 > **Response format**: one envelope for success, lists and errors (see "Response format" below)
 > **Language**: all `message` values are Vietnamese; `code` values are stable and machine-readable
-> **Last updated**: 2026-10-02 (sales list filters, refresh-token reuse detection, malformed-JSON message, response labelling)
+> **Last updated**: 2026-10-02 (typed OpenAPI contract; response views aligned with the generated schemas)
+
+> **Contract sources.** This file is the prose reference. The machine-readable contract is [`openapi.json`](openapi.json) (generated from the code, **the source of truth** for field names, types, enums, required/optional, roles and per-endpoint error codes) and its TypeScript form [`api-types.ts`](api-types.ts). Frontend developers: start with the Vietnamese [integration guide](api_integration_guide.md) (conventions, auth flow, business flows, error catalogue). Where this file and `openapi.json` ever differ, `openapi.json` wins (it is verified against real responses by `test/openapi-contract.e2e-spec.ts`); please fix this file. Regenerate with `npm run openapi:export`; `npm run openapi:check` fails when the committed files are stale.
+>
+> Response type names used below (`ProductResponse`, `SaleDetailResponse`, ...) are the schema names in `openapi.json` / `api-types.ts` (`components['schemas']['ProductResponse']`); request bodies and query objects are the `*Dto` schemas.
 
 ---
 
@@ -82,7 +86,7 @@ Every response from every endpoint, including lists, errors and `GET /health`, u
 - `code` is `OK` on success and a stable machine-readable value on errors; `message` is Vietnamese (the default success message is `Thành công`; main write endpoints have specific ones, e.g. `Đăng nhập thành công`, `Tạo hóa đơn thành công`, `Xác nhận nhận hàng thành công`).
 - `details` appears on errors only when useful (field errors, stock availability, ...). Validation errors use `details: [{ "field": "items.0.quantity", "messages": ["Số lượng phải lớn hơn hoặc bằng 1"] }]`; all validation messages are Vietnamese.
 - `meta` appears only on list endpoints. (`GET /reports/inventory` returns its product page inside `data.products` as `{ items, meta }`.)
-- `requestId` echoes a valid `X-Request-Id` request header, otherwise it is generated; quote it when reporting problems. Every server log line of the request carries this id; server errors (5xx) are logged with the stack trace, business errors (409/422 and other domain errors) as warnings with `code` and route, and the stack is never returned.
+- `requestId` echoes a valid `X-Request-Id` request header (1-64 chars of `A-Za-z0-9._-`), otherwise it is generated; quote it when reporting problems. It is only returned in the envelope body: the server does **not** send an `X-Request-Id` response header. Every server log line of the request carries this id; server errors (5xx) are logged with the stack trace, business errors (409/422 and other domain errors) as warnings with `code` and route, and the stack is never returned.
 - Operations that used to answer `204 No Content` (`POST /auth/logout`, `POST /users/:id/reset-password`) now answer `200` with `data: null`, because an enveloped body needs content.
 
 ### Error codes
@@ -90,25 +94,25 @@ Every response from every endpoint, including lists, errors and `GET /health`, u
 | HTTP | `code` | When |
 |------|--------|------|
 | 400 | `VALIDATION_ERROR` | Invalid body/query/params, unknown properties, Prisma validation error. Malformed JSON: message `Nội dung JSON không hợp lệ.`; empty body with a JSON content type: `Nội dung yêu cầu không được để trống.` (neither has `details`) |
-| 400 | `INVALID_DATE_RANGE` | Report/filter dates malformed, `to < from`, or range over 366 days |
+| 400 | `INVALID_DATE_RANGE` | A date that does not exist (e.g. `2026-02-31`), `to < from`, or - for `/reports/*` only - a range over 366 days (list filters have no maximum range and accept `from` or `to` alone) |
 | 401 | `UNAUTHENTICATED` | Missing/invalid/expired token, revoked session, locked user |
 | 401 | `INVALID_CREDENTIALS` | Wrong username or password (one generic message) |
 | 401 | `INVALID_REFRESH_TOKEN` | Refresh token unknown, rotated away, expired or session revoked. Presenting a token that was already rotated also revokes the whole session (reuse detection) |
 | 403 | `FORBIDDEN` | Role not allowed (denial is logged) |
 | 403 | `ACCOUNT_LOCKED` | Correct password but the account is locked/inactive |
 | 404 | `NOT_FOUND` | Unknown route or resource |
-| 404 | `USER_NOT_FOUND`, `CATEGORY_NOT_FOUND`, `PRODUCT_NOT_FOUND`, `SUPPLIER_NOT_FOUND`, `CUSTOMER_NOT_FOUND`, `SALE_NOT_FOUND`, `PURCHASE_NOT_FOUND` | Referenced record does not exist |
+| 404 | `USER_NOT_FOUND`, `CATEGORY_NOT_FOUND`, `PRODUCT_NOT_FOUND`, `SUPPLIER_NOT_FOUND`, `CUSTOMER_NOT_FOUND`, `SALE_NOT_FOUND`, `PURCHASE_NOT_FOUND` | The record addressed by the URL (or `customerId` at checkout, `code`/`q` lookups) does not exist |
 | 409 | `INSUFFICIENT_STOCK` | Checkout quantity above current stock; `details` lists availability per product |
-| 409 | `STOCK_CONFLICT` | Stock changed since the count form was read; `details.currentStockQty` |
+| 409 | `STOCK_CONFLICT` | Stock changed since the count form was read; `details: { productId, expectedSystemQty, currentStockQty }` |
 | 409 | `PURCHASE_ALREADY_RECEIVED`, `PURCHASE_CANCELLED` | Purchase is not a DRAFT any more |
-| 409 | `DUPLICATE_VALUE` | Unique constraint (username, SKU, barcode, phone, ...) |
+| 409 | `DUPLICATE_VALUE` | Unique constraint (username, SKU, barcode, phone, category name); `details.fields` is the MySQL unique-index name, e.g. `products_sku_key` |
 | 409 | `RESOURCE_IN_USE` | Foreign-key reference blocks the operation |
 | 409 | `CANNOT_LOCK_SELF`, `LAST_ACTIVE_ADMIN` | User-management safeguards |
 | 409 | `TRANSACTION_CONFLICT` | Deadlock / lock wait timeout persisted after 3 automatic attempts; retry the request |
 | 413 | `PAYLOAD_TOO_LARGE` | Request body over the 1 MB limit |
 | 415 | `UNSUPPORTED_MEDIA_TYPE` | Body is not `application/json` |
 | 422 | `INVALID_QUANTITY`, `INVALID_DISCOUNT`, `INVALID_PAYMENT`, `INVALID_PURCHASE_LINE` | Business-rule violation on a well-formed body |
-| 422 | `PRODUCT_UNAVAILABLE`, `SUPPLIER_INACTIVE`, `SUPPLIER_NOT_FOUND`, `CATEGORY_INACTIVE`, `CATEGORY_NOT_FOUND`, `CUSTOMER_NOT_FOUND` (inside bodies) | Referenced record unknown or inactive |
+| 422 | `PRODUCT_UNAVAILABLE`, `SUPPLIER_INACTIVE`, `SUPPLIER_NOT_FOUND`, `CATEGORY_INACTIVE`, `CATEGORY_NOT_FOUND` (referenced from inside a body) | Referenced record unknown or inactive. (`CUSTOMER_NOT_FOUND` at checkout is a `404`, not a `422`.) |
 | 422 | `CONSTRAINT_VIOLATION` | A database CHECK constraint rejected the data (e.g. negative stock) |
 | 429 | `TOO_MANY_REQUESTS` | Rate limit hit (login is much stricter) |
 | 500 | `INTERNAL_ERROR` | Unexpected error; details only in the server log |
@@ -123,9 +127,9 @@ List endpoints accept `page` (default 1) and `pageSize` (default 20, max 100). I
 
 ### Numbers and dates
 
-- Money (VND) and quantities are JSON **numbers**. They are stored and computed as `DECIMAL`, never floats. Money has at most 2 decimals; v1 quantities are whole numbers (BR4), enforced by the service.
+- Money (VND) and quantities are JSON **numbers** (`type: number` in the schemas; ids, counts, `page`, `pageSize`, `pointsEarned`, `loyaltyPoints` are `integer`). They are stored and computed as `DECIMAL`, never floats. Money has at most 2 decimals; v1 quantities are whole numbers (BR4), enforced by the service.
 - Timestamps are ISO-8601 UTC strings (`2026-10-02T04:50:53.609Z`).
-- Date parameters (`from`, `to`) are calendar dates `YYYY-MM-DD` interpreted in `Asia/Ho_Chi_Minh`; `to` is inclusive.
+- Date parameters (`from`, `to`) are calendar dates `YYYY-MM-DD` interpreted in `Asia/Ho_Chi_Minh`; `to` is inclusive. Reports require both and cap the range at 366 days; list filters (`/sales`, `/purchases`, `/inventory/movements`, `/inventory/stock-counts`) accept either bound alone.
 
 ### Document numbers
 
@@ -145,7 +149,7 @@ List endpoints accept `page` (default 1) and `pageSize` (default 20, max 100). I
 **Auth required**: No · **Roles**: public
 **Description**: Liveness plus a `SELECT 1` against the database.
 
-**Response 200 — `data` field of the envelope**: `{ "status": "ok", "database": "up" }`
+**Response 200 — `data` field of the envelope** (`HealthResponse`): `{ "status": "ok", "database": "up" }`
 **Error codes**: `503 SERVICE_UNAVAILABLE` database unreachable.
 
 ---
@@ -162,7 +166,7 @@ List endpoints accept `page` (default 1) and `pageSize` (default 20, max 100). I
 { "username": "string — required, case-insensitive", "password": "string — required" }
 ```
 
-**Response 200 — `data` field of the envelope**:
+**Response 200 — `data` field of the envelope** (`AuthTokensResponse`):
 ```json
 {
   "tokenType": "Bearer",
@@ -198,7 +202,7 @@ List endpoints accept `page` (default 1) and `pageSize` (default 20, max 100). I
 #### GET /auth/me
 
 **Auth required**: Yes · **Roles**: any authenticated role
-**Response 200 — `data` field of the envelope**: `{ "id", "username", "fullName", "role" }`
+**Response 200 — `data` field of the envelope** (`SessionUserResponse`): `{ "id", "username", "fullName", "role" }`
 
 ---
 
@@ -206,7 +210,7 @@ List endpoints accept `page` (default 1) and `pageSize` (default 20, max 100). I
 
 All user endpoints: **Roles: ADMIN**. Responses never include the password hash.
 
-User view: `{ id, username, fullName, role, isActive, createdAt, updatedAt }`.
+User view (`UserResponse`): `{ id, username, fullName, role, isActive, createdAt, updatedAt }`.
 
 #### GET /users
 
@@ -256,7 +260,7 @@ User view: `{ id, username, fullName, role, isActive, createdAt, updatedAt }`.
 
 ## Categories
 
-Category: `{ id, name, description, isActive, createdAt, updatedAt }`. Names are unique and non-blank.
+Category (`CategoryResponse`): `{ id, name, description (string | null), isActive, createdAt, updatedAt }`. Names are unique and non-blank.
 
 | Endpoint | Roles | Notes |
 |----------|-------|-------|
@@ -271,7 +275,7 @@ Category: `{ id, name, description, isActive, createdAt, updatedAt }`. Names are
 
 ## Products
 
-Product view:
+Product view (`ProductResponse`):
 
 ```json
 {
@@ -282,7 +286,7 @@ Product view:
 }
 ```
 
-`costPrice` is **omitted for CASHIER**. `stockQty` and `costPrice` are read-only through the API: stock changes only through purchases, sales and stock counts; cost changes only by receiving purchases (BR11), apart from an optional opening cost on create.
+`costPrice` is **omitted for CASHIER** (the key is absent, not `null`; it is optional in the schema, `costPrice?: number`). `stockQty` and `costPrice` are read-only through the API: stock changes only through purchases, sales and stock counts; cost changes only by receiving purchases (BR11), apart from an optional opening cost on create.
 
 #### GET /products
 
@@ -334,7 +338,7 @@ Product view:
 
 ## Suppliers
 
-**Roles (all endpoints)**: ADMIN, STOCKKEEPER. Supplier: `{ id, name, phone, email, address, note, isActive, createdAt, updatedAt }`.
+**Roles (all endpoints)**: ADMIN, STOCKKEEPER. Supplier (`SupplierResponse`): `{ id, name, phone, email, address, note (each string | null), isActive, createdAt, updatedAt }`.
 
 | Endpoint | Notes |
 |----------|-------|
@@ -348,7 +352,7 @@ Product view:
 
 ## Customers
 
-**Roles (all endpoints)**: ADMIN, CASHIER. Customer: `{ id, customerCode, fullName, phone, email, loyaltyPoints, createdAt, updatedAt }`.
+**Roles (all endpoints)**: ADMIN, CASHIER. Customer (`CustomerResponse`): `{ id, customerCode, fullName, phone (string | null), email (string | null), loyaltyPoints, createdAt, updatedAt }`.
 
 Phone numbers are normalised (`+84901234567`, `0901 234 567` -> `0901234567`) and must be 10-11 digits starting with 0. A phone is unique when present.
 
@@ -379,7 +383,7 @@ Phone numbers are normalised (`+84901234567`, `0901 234 567` -> `0901234567`) an
 
 **Roles (all endpoints)**: ADMIN, STOCKKEEPER.
 
-Purchase detail: `{ id, purchaseNo, supplierId, supplier:{id,name}, createdBy, creator:{id,fullName}, status (DRAFT|RECEIVED|CANCELLED), subtotal, total, note, receivedAt, receivedBy, createdAt, updatedAt, items:[{ id, productId, product:{id,sku,name,unit}, quantity, unitCost, lineTotal }] }`. Totals are computed server-side (`subtotal = total = sum of line totals`).
+Purchase detail (`PurchaseDetailResponse`): `{ id, purchaseNo, supplierId, supplier:{id,name}, createdBy, creator:{id,fullName}, status (DRAFT|RECEIVED|CANCELLED), subtotal, total, note (string | null), receivedAt (ISO | null), receivedBy (user id | null), createdAt, updatedAt, items:[{ id, purchaseId, productId, product:{id,sku,name,unit}, quantity, unitCost, lineTotal }] }`. The list item (`PurchaseListItemResponse`) is the same without `items`. There is no `receiver` object: only the id `receivedBy` is returned. Totals are computed server-side (`subtotal = total = sum of line totals`).
 
 Line rules (UC-03 E2): at least one line, one line per product, `quantity` a whole number > 0, `unitCost` >= 0 with at most 2 decimals.
 
@@ -427,21 +431,23 @@ Line rules (UC-03 E2): at least one line, one line per product, `quantity` a who
 
 ## Sales (POS)
 
-Sale detail:
+Sale detail (`SaleDetailResponse`):
 
 ```json
 {
   "id": 1, "invoiceNo": "HD202610020001", "customerId": 1, "cashierId": 2, "status": "PAID",
   "subtotal": 40000, "discountAmount": 4000, "total": 36000, "pointsEarned": 3, "note": null,
   "soldAt": "...", "createdAt": "...", "updatedAt": "...",
-  "items": [ { "id": 1, "productId": 13, "skuSnapshot": "...", "nameSnapshot": "...", "quantity": 2,
+  "items": [ { "id": 1, "saleId": 1, "productId": 13, "skuSnapshot": "...", "nameSnapshot": "...", "quantity": 2,
                "unitPrice": 5000, "unitCostSnapshot": 3500, "discountAmount": 1000, "lineTotal": 9000 } ],
-  "payments": [ { "id": 1, "method": "CASH", "amount": 36000, "tenderedAmount": 50000,
+  "payments": [ { "id": 1, "saleId": 1, "method": "CASH", "amount": 36000, "tenderedAmount": 50000,
                   "changeAmount": 14000, "paidAt": "...", "reference": null } ],
   "customer": { "id": 1, "customerCode": "KH000001", "fullName": "...", "phone": "...", "loyaltyPoints": 3 },
   "cashier": { "id": 2, "fullName": "..." }
 }
 ```
+
+`unitCostSnapshot` (unit cost at the time of sale) is returned to every role that can read sales, including CASHIER. It is internal information: clients must not display it to cashiers. (Open item: hiding it per role would be a contract change.)
 
 #### POST /sales
 
@@ -465,12 +471,13 @@ Rules:
 - Payments: 1-10 entries whose `amount`s sum **exactly** to the total. CASH: `tenderedAmount >= amount` (default = amount), `changeAmount = tendered - amount`. Other methods: tendered = amount, change = 0.
 - Points (BR6): `floor(total / POINTS_PER_VND)` (default 10000), only with a customer.
 
-**Response 201 — `data` field of the envelope**: sale detail.
+**Response 201 — `data` field of the envelope**: sale detail (`SaleDetailResponse`).
 **Error codes**:
 - `400` — validation (empty cart, quantity 0/negative/fractional, ...)
 - `404` — `CUSTOMER_NOT_FOUND`
 - `409` — `INSUFFICIENT_STOCK`, `details: [{ productId, sku, name, requested, available }]` for each short product (UC-02 E2/E3)
-- `422` — `PRODUCT_UNAVAILABLE` (unknown or inactive, `details: [{ productId, reason }]`), `INVALID_DISCOUNT`, `INVALID_PAYMENT`, `INVALID_QUANTITY`
+- `422` — `PRODUCT_UNAVAILABLE` (unknown or inactive, `details: [{ productId, reason: INACTIVE | NOT_FOUND }]`), `INVALID_DISCOUNT` (`details: { subtotal }` when discount >= subtotal, or `{ maxDiscountPercent, maxDiscountAmount }` above the role limit), `INVALID_PAYMENT` (`details: { total, paid }` when the payments do not add up), `INVALID_QUANTITY`
+- `409 TRANSACTION_CONFLICT`, `503 TRANSACTION_TIMEOUT` — nothing was written; safe to retry. There is no idempotency key: a request that got no response at all may or may not have created the invoice (check `GET /sales` before retrying).
 
 #### GET /sales
 
@@ -488,13 +495,15 @@ Rules:
 | `page`, `pageSize` | Pagination |
 
 Example: `GET /sales?customerQuery=0987&paymentMethod=TRANSFER&from=2026-10-01`.
-**Response 200 — `data` field of the envelope**: paginated sales (newest first) with `customer`, `cashier` summaries and `payments: [{ method, amount }]`.
+**Response 200 — `data` field of the envelope**: paginated `SaleListItemResponse` (newest first): the sale columns (`id, invoiceNo, customerId, cashierId, status, subtotal, discountAmount, total, pointsEarned, note, soldAt, createdAt, updatedAt`) plus `customer: { id, customerCode, fullName } | null`, `cashier: { id, fullName }` and `payments: [{ method, amount }]` (no `items`).
 
 #### GET /sales/:id
 
 **Roles**: ADMIN, CASHIER. **Response 200 — `data` field of the envelope**: sale detail. **Errors**: `404 SALE_NOT_FOUND`.
 
 #### GET /sales/:id/print
+
+(Response type `ReceiptResponse`.)
 
 **Roles**: ADMIN, CASHIER
 **Description**: Print-friendly receipt payload. Read-only: reprinting never creates a sale (UC-02 E7).
@@ -521,7 +530,7 @@ Example: `GET /sales?customerQuery=0987&paymentMethod=TRANSFER&from=2026-10-01`.
 
 **Roles**: ADMIN, CASHIER, STOCKKEEPER (cashiers: current stock only; no cost data is returned here)
 **Query**: `search` (name, SKU, barcode), `categoryId`, `lowStock=true` (stock <= reorder level), `isActive` (default `true`), `page`, `pageSize`.
-**Response 200 — `data` field of the envelope**: paginated `{ productId, sku, barcode, name, unit, categoryId, categoryName, stockQty, reorderLevel, isLowStock, isActive }`.
+**Response 200 — `data` field of the envelope**: paginated `StockItemResponse`: `{ productId, sku, barcode (string | null), name, unit, categoryId, categoryName, stockQty, reorderLevel, isLowStock, isActive }`.
 
 #### GET /inventory/low-stock
 
@@ -532,13 +541,13 @@ Example: `GET /sales?customerQuery=0987&paymentMethod=TRANSFER&from=2026-10-01`.
 
 **Roles**: ADMIN, STOCKKEEPER
 **Query**: `productId`, `type` (`PURCHASE | SALE | ADJUSTMENT | REVERSAL`), `from`, `to`, `page`, `pageSize`.
-**Response 200 — `data` field of the envelope**: paginated movements (newest first): `{ id, productId, product:{id,sku,name,unit}, movementType, quantityChange (signed), referenceType, referenceId, createdBy, creator:{id,fullName}, note, createdAt }`.
+**Response 200 — `data` field of the envelope**: paginated `MovementResponse` (newest first): `{ id, productId, product:{id,sku,name,unit}, movementType, quantityChange (signed), referenceType, referenceId, createdBy, creator:{id,fullName}, note (string | null), createdAt }`.
 
 #### GET /inventory/stock-counts
 
 **Roles**: ADMIN, STOCKKEEPER
 **Query**: `productId`, `from`, `to`, `page`, `pageSize`.
-**Response 200 — `data` field of the envelope**: paginated `{ id, countNo, productId, product, systemQty, countedQty, difference, reason, createdBy, creator, createdAt }`.
+**Response 200 — `data` field of the envelope**: paginated `StockCountResponse`: `{ id, countNo, productId, product:{id,sku,name,unit}, systemQty, countedQty, difference, reason, createdBy, creator:{id,fullName}, createdAt }`.
 
 #### POST /inventory/stock-counts
 
@@ -554,10 +563,10 @@ Example: `GET /sales?customerQuery=0987&paymentMethod=TRANSFER&from=2026-10-01`.
   "expectedSystemQty": "the stock the user saw"
 }
 ```
-**Response 201 — `data` field of the envelope**:
+**Response 201 — `data` field of the envelope** (`StockCountResultResponse`):
 ```json
 {
-  "stockCount": { "id": 1, "countNo": "KK202610020001", "systemQty": 10, "countedQty": 7, "difference": -3, "reason": "...", "createdAt": "...", "creator": { "id": 3, "fullName": "..." }, "product": { "id": 1, "sku": "...", "name": "...", "unit": "..." } },
+  "stockCount": { "id": 1, "countNo": "KK202610020001", "productId": 1, "systemQty": 10, "countedQty": 7, "difference": -3, "reason": "...", "createdBy": 3, "createdAt": "...", "creator": { "id": 3, "fullName": "..." }, "product": { "id": 1, "sku": "...", "name": "...", "unit": "..." } },
   "product": { "id": 1, "sku": "...", "name": "...", "unit": "...", "stockQty": 7 }
 }
 ```
@@ -567,7 +576,7 @@ Example: `GET /sales?customerQuery=0987&paymentMethod=TRANSFER&from=2026-10-01`.
 
 ## Reports
 
-All reports require `from` and `to` (`YYYY-MM-DD`, store time, `to` inclusive). `to < from`, a malformed date, or a range over 366 days returns `400 INVALID_DATE_RANGE` / `VALIDATION_ERROR`. An empty range returns `200` with empty `rows` and zero totals. Every response starts with `{ from, to, generatedAt }`. Day/month grouping is done in SQL with a fixed `+07:00` offset (no MySQL time-zone tables needed). Only `PAID` sales count.
+Response types: `RevenueReportResponse`, `TopProductsReportResponse`, `GrossProfitReportResponse`, `InventoryReportResponse`. All reports require `from` and `to` (`YYYY-MM-DD`, store time, `to` inclusive). `to < from`, a malformed date, or a range over 366 days returns `400 INVALID_DATE_RANGE` / `VALIDATION_ERROR`. An empty range returns `200` with empty `rows` and zero totals (periods without invoices are simply absent from `rows`). Every response starts with `{ from, to, generatedAt }`. Day/month grouping is done in SQL with a fixed `+07:00` offset (no MySQL time-zone tables needed). Only `PAID` sales count.
 
 #### GET /reports/revenue
 

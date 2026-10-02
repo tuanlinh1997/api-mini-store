@@ -19,7 +19,7 @@ npm run start:dev
 ```
 
 - API: `http://localhost:3000/api/v1` (health check: `GET /api/v1/health`)
-- Swagger UI: `http://localhost:3000/api/docs`
+- Swagger UI: `http://localhost:3000/api/docs` · API contract for frontend: [`docs/backend/openapi.json`](docs/backend/openapi.json), [`docs/backend/api-types.ts`](docs/backend/api-types.ts), guide (Vietnamese): [`docs/backend/api_integration_guide.md`](docs/backend/api_integration_guide.md)
 - Seed logins: the admin from `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD`, plus `cashier` and `stockkeeper` with `SEED_DEMO_PASSWORD` (all values come from `.env`; use the example values only locally).
 
 ```bash
@@ -52,6 +52,8 @@ Migrations run automatically before the API starts; the seeds never do. Details 
 | `npm run prisma:seed` | Base seed: users and a small catalog (idempotent) |
 | `npm run seed:demo -- --reset` | Fill every table with ~90 days of consistent demo data (dev DB only; refuses production/test DBs) |
 | `npm run seed:demo:verify` | 24 PASS/FAIL consistency checks on the demo data (`-- --database-url=...` to check another database) |
+| `npm run openapi:export` | Regenerate the API contract: `docs/backend/openapi.json` + `docs/backend/api-types.ts` (no database needed; commit both) |
+| `npm run openapi:check` | Fail when the committed contract files are stale (CI) |
 | `npm run db:backup` | Gzipped, timestamped `mysqldump` into `BACKUP_DIR` (default `./backups`), keeps the newest `BACKUP_RETENTION_COUNT` |
 | `npm run db:restore -- --file=<backup> --target=<db>` | Restore a backup into another database (refuses the `DATABASE_URL` database and production without `--force`) |
 | `npm run db:compare -- --source=<db> --target=<db>` | Compare row counts per table of two databases |
