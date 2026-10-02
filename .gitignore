@@ -1,0 +1,28 @@
+# Claude Code
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
+START_HERE.md
+TODO.md
+docs/
+.tasks/
+.github/
+
+# Node / build
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+
+# Environment (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
