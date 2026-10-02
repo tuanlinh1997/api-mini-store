@@ -14,7 +14,7 @@ Read by: @frontend-developer (to know what endpoints to call and their contracts
 > **Content-Type**: `application/json` for all requests and responses
 > **Response format**: one envelope for success, lists and errors (see "Response format" below)
 > **Language**: all `message` values are Vietnamese; `code` values are stable and machine-readable
-> **Last updated**: 2026-10-02
+> **Last updated**: 2026-10-02 (sales list filters, refresh-token reuse detection, malformed-JSON message, response labelling)
 
 ---
 
@@ -24,13 +24,20 @@ Read by: @frontend-developer (to know what endpoints to call and their contracts
 
 `POST /auth/login` returns a short-lived JWT access token (15 minutes by default) and an opaque refresh token. Send the access token as `Authorization: Bearer ...`. On every request the server also checks that the session is not revoked and the user is still active, so logout and locking a user take effect immediately. When the access token expires, call `POST /auth/refresh`; the refresh token is rotated on each use.
 
+### Sessions and refresh tokens
+
+- A refresh token is single-use: `POST /auth/refresh` returns a new one and the old one stops working.
+- **Reuse detection**: presenting a refresh token that was already rotated (a stale client, or a stolen copy) answers `401 INVALID_REFRESH_TOKEN` **and revokes that whole session**. The newest refresh token and the session's access token stop working immediately, so the user has to log in again. Only the immediately previous token is recognised; older or unknown tokens just answer `401` without side effects.
+- Expired or revoked sessions are deleted by a daily server job once they are older than `SESSION_RETENTION_DAYS` (default 30); this is invisible to clients.
+- Clients should therefore never retry a refresh with an old token; if a refresh call fails with `401`, send the user to the login screen.
+
 ### Roles
 
 `ADMIN`, `CASHIER`, `STOCKKEEPER`. The "Roles" line of each endpoint lists who may call it; everyone else gets `403 FORBIDDEN` (and the denial is logged). Routes are deny-by-default. The matrix lives in `src/common/permissions/permissions.ts`.
 
 ### Response format
 
-Every response from every endpoint, including lists, errors and `GET /health`, uses one envelope. Real HTTP status codes are kept (201 on create, 4xx/5xx on errors); the envelope repeats the status in `statusCode`. Swagger UI and `/api/docs-json` are not wrapped. In the per-endpoint sections below, the **Response** blocks show only the `data` payload.
+Every response from every endpoint, including lists, errors and `GET /health`, uses one envelope. Real HTTP status codes are kept (201 on create, 4xx/5xx on errors); the envelope repeats the status in `statusCode`. Swagger UI and `/api/docs-json` are not wrapped. In the per-endpoint sections below, every **Response** block is labelled "`data` field of the envelope": it shows only the value of `data` (for lists, the items; `meta` carries the pagination), never the whole envelope. `success`, `statusCode`, `code`, `message`, `requestId` and `timestamp` are always present around it.
 
 **Success**
 
@@ -75,18 +82,18 @@ Every response from every endpoint, including lists, errors and `GET /health`, u
 - `code` is `OK` on success and a stable machine-readable value on errors; `message` is Vietnamese (the default success message is `Thành công`; main write endpoints have specific ones, e.g. `Đăng nhập thành công`, `Tạo hóa đơn thành công`, `Xác nhận nhận hàng thành công`).
 - `details` appears on errors only when useful (field errors, stock availability, ...). Validation errors use `details: [{ "field": "items.0.quantity", "messages": ["Số lượng phải lớn hơn hoặc bằng 1"] }]`; all validation messages are Vietnamese.
 - `meta` appears only on list endpoints. (`GET /reports/inventory` returns its product page inside `data.products` as `{ items, meta }`.)
-- `requestId` echoes a valid `X-Request-Id` request header, otherwise it is generated; quote it when reporting problems. Server errors (5xx) are logged with this id and the stack trace; the stack is never returned.
+- `requestId` echoes a valid `X-Request-Id` request header, otherwise it is generated; quote it when reporting problems. Every server log line of the request carries this id; server errors (5xx) are logged with the stack trace, business errors (409/422 and other domain errors) as warnings with `code` and route, and the stack is never returned.
 - Operations that used to answer `204 No Content` (`POST /auth/logout`, `POST /users/:id/reset-password`) now answer `200` with `data: null`, because an enveloped body needs content.
 
 ### Error codes
 
 | HTTP | `code` | When |
 |------|--------|------|
-| 400 | `VALIDATION_ERROR` | Invalid body/query/params, unknown properties, malformed JSON, Prisma validation error |
+| 400 | `VALIDATION_ERROR` | Invalid body/query/params, unknown properties, Prisma validation error. Malformed JSON: message `Nội dung JSON không hợp lệ.`; empty body with a JSON content type: `Nội dung yêu cầu không được để trống.` (neither has `details`) |
 | 400 | `INVALID_DATE_RANGE` | Report/filter dates malformed, `to < from`, or range over 366 days |
 | 401 | `UNAUTHENTICATED` | Missing/invalid/expired token, revoked session, locked user |
 | 401 | `INVALID_CREDENTIALS` | Wrong username or password (one generic message) |
-| 401 | `INVALID_REFRESH_TOKEN` | Refresh token unknown, rotated away, expired or session revoked |
+| 401 | `INVALID_REFRESH_TOKEN` | Refresh token unknown, rotated away, expired or session revoked. Presenting a token that was already rotated also revokes the whole session (reuse detection) |
 | 403 | `FORBIDDEN` | Role not allowed (denial is logged) |
 | 403 | `ACCOUNT_LOCKED` | Correct password but the account is locked/inactive |
 | 404 | `NOT_FOUND` | Unknown route or resource |
@@ -112,11 +119,7 @@ Request bodies reject unknown properties (`400 VALIDATION_ERROR`), which is how 
 
 ### Pagination
 
-List endpoints accept `page` (default 1) and `pageSize` (default 20, max 100) and return:
-
-```json
-{ "items": [ ... ], "meta": { "page": 1, "pageSize": 20, "total": 134 } }
-```
+List endpoints accept `page` (default 1) and `pageSize` (default 20, max 100). In the envelope, `data` is the array of items and `meta` is `{ "page": 1, "pageSize": 20, "total": 134 }` (see the List example above).
 
 ### Numbers and dates
 
@@ -142,7 +145,7 @@ List endpoints accept `page` (default 1) and `pageSize` (default 20, max 100) an
 **Auth required**: No · **Roles**: public
 **Description**: Liveness plus a `SELECT 1` against the database.
 
-**Response 200** (`data`): `{ "status": "ok", "database": "up" }`
+**Response 200 — `data` field of the envelope**: `{ "status": "ok", "database": "up" }`
 **Error codes**: `503 SERVICE_UNAVAILABLE` database unreachable.
 
 ---
@@ -159,7 +162,7 @@ List endpoints accept `page` (default 1) and `pageSize` (default 20, max 100) an
 { "username": "string — required, case-insensitive", "password": "string — required" }
 ```
 
-**Response 200**:
+**Response 200 — `data` field of the envelope**:
 ```json
 {
   "tokenType": "Bearer",
@@ -180,22 +183,22 @@ List endpoints accept `page` (default 1) and `pageSize` (default 20, max 100) an
 #### POST /auth/refresh
 
 **Auth required**: No · **Roles**: public
-**Description**: Rotates the refresh token (the old one stops working) and returns a new access token for the same session.
+**Description**: Rotates the refresh token (the old one stops working) and returns a new access token for the same session. Replaying an already-rotated token revokes the session (see "Sessions and refresh tokens").
 
 **Request body**: `{ "refreshToken": "string" }`
-**Response 200**: same shape as login.
+**Response 200 — `data` field of the envelope**: same shape as login.
 **Error codes**: `401` — `INVALID_REFRESH_TOKEN` (unknown, rotated-away, expired, revoked session, or user locked).
 
 #### POST /auth/logout
 
 **Auth required**: Yes · **Roles**: any authenticated role
 **Description**: Revokes the current session. The access token is rejected immediately afterwards.
-**Response 200**: `data: null`.
+**Response 200 — `data` field of the envelope**: `data: null`.
 
 #### GET /auth/me
 
 **Auth required**: Yes · **Roles**: any authenticated role
-**Response 200**: `{ "id", "username", "fullName", "role" }`
+**Response 200 — `data` field of the envelope**: `{ "id", "username", "fullName", "role" }`
 
 ---
 
@@ -208,11 +211,11 @@ User view: `{ id, username, fullName, role, isActive, createdAt, updatedAt }`.
 #### GET /users
 
 **Query**: `search` (username or full name), `role`, `isActive`, `page`, `pageSize`.
-**Response 200**: paginated list of user views.
+**Response 200 — `data` field of the envelope**: paginated list of user views.
 
 #### GET /users/:id
 
-**Response 200**: user view. **Errors**: `404 USER_NOT_FOUND`.
+**Response 200 — `data` field of the envelope**: user view. **Errors**: `404 USER_NOT_FOUND`.
 
 #### POST /users
 
@@ -225,29 +228,29 @@ User view: `{ id, username, fullName, role, isActive, createdAt, updatedAt }`.
   "role": "ADMIN | CASHIER | STOCKKEEPER"
 }
 ```
-**Response 201**: user view. **Errors**: `400` validation, `409 DUPLICATE_VALUE` (username taken).
+**Response 201 — `data` field of the envelope**: user view. **Errors**: `400` validation, `409 DUPLICATE_VALUE` (username taken).
 
 #### PATCH /users/:id
 
 **Request body** (all optional): `{ "fullName": "string", "role": "ADMIN | CASHIER | STOCKKEEPER" }`
-**Response 200**: user view.
+**Response 200 — `data` field of the envelope**: user view.
 **Errors**: `404`, `409 LAST_ACTIVE_ADMIN` (cannot demote the last active admin).
 
 #### POST /users/:id/lock
 
 **Description**: Sets `isActive=false` and revokes all of the user's sessions at once. No delete endpoint exists (F2/BR10).
-**Response 200**: user view.
+**Response 200 — `data` field of the envelope**: user view.
 **Errors**: `404`, `409 CANNOT_LOCK_SELF`, `409 LAST_ACTIVE_ADMIN`.
 
 #### POST /users/:id/unlock
 
-**Response 200**: user view. **Errors**: `404`.
+**Response 200 — `data` field of the envelope**: user view. **Errors**: `404`.
 
 #### POST /users/:id/reset-password
 
 **Request body**: `{ "newPassword": "8-128 chars" }`
 **Description**: Replaces the password and revokes all of the user's sessions.
-**Response 200**: `data: null`. **Errors**: `400`, `404`.
+**Response 200 — `data` field of the envelope**: `data: null`. **Errors**: `400`, `404`.
 
 ---
 
@@ -285,14 +288,14 @@ Product view:
 
 **Roles**: ADMIN, CASHIER, STOCKKEEPER
 **Query**: `search` (name, SKU or barcode), `categoryId`, `isActive`, `page`, `pageSize`.
-**Response 200**: paginated product views, ordered by name.
+**Response 200 — `data` field of the envelope**: paginated product views, ordered by name.
 
 #### GET /products/lookup
 
 **Roles**: ADMIN, CASHIER, STOCKKEEPER
 **Description**: POS scan. Exact barcode or SKU match, **active products only**.
 **Query**: `code` (required).
-**Response 200**: product view. **Errors**: `404 PRODUCT_NOT_FOUND` (not found or inactive, UC-02 E1).
+**Response 200 — `data` field of the envelope**: product view. **Errors**: `404 PRODUCT_NOT_FOUND` (not found or inactive, UC-02 E1).
 
 #### GET /products/:id
 
@@ -314,18 +317,18 @@ Product view:
   "reorderLevel": "integer >= 0, optional (default 0)"
 }
 ```
-**Response 201**: product view with `stockQty: 0`.
+**Response 201 — `data` field of the envelope**: product view with `stockQty: 0`.
 **Errors**: `400` (incl. unknown fields such as `stockQty`), `409 DUPLICATE_VALUE` (sku/barcode), `422 CATEGORY_NOT_FOUND | CATEGORY_INACTIVE`.
 
 #### PATCH /products/:id
 
 **Roles**: ADMIN, STOCKKEEPER
 **Request body** (all optional): `categoryId`, `sku`, `barcode` (null clears), `name`, `unit`, `salePrice`, `reorderLevel`. Sending `stockQty` or `costPrice` is a `400`.
-**Response 200**: product view. **Errors**: `404`, `409`, `422`.
+**Response 200 — `data` field of the envelope**: product view. **Errors**: `404`, `409`, `422`.
 
 #### POST /products/:id/deactivate · POST /products/:id/activate
 
-**Roles**: ADMIN, STOCKKEEPER · **Response 200**: product view. Inactive products cannot be sold or received.
+**Roles**: ADMIN, STOCKKEEPER · **Response 200 — `data` field of the envelope**: product view. Inactive products cannot be sold or received.
 
 ---
 
@@ -351,11 +354,11 @@ Phone numbers are normalised (`+84901234567`, `0901 234 567` -> `0901234567`) an
 
 #### GET /customers
 
-**Query**: `search` (name, code or phone), `page`, `pageSize`. **Response 200**: paginated customers (newest first).
+**Query**: `search` (name, code or phone), `page`, `pageSize`. **Response 200 — `data` field of the envelope**: paginated customers (newest first).
 
 #### GET /customers/lookup
 
-**Query**: `q` (required) — customer code or exact phone. **Response 200**: customer. **Errors**: `404 CUSTOMER_NOT_FOUND` (the POS may continue without a customer or create one; the server never guesses).
+**Query**: `q` (required) — customer code or exact phone. **Response 200 — `data` field of the envelope**: customer. **Errors**: `404 CUSTOMER_NOT_FOUND` (the POS may continue without a customer or create one; the server never guesses).
 
 #### GET /customers/:id
 
@@ -364,7 +367,7 @@ Phone numbers are normalised (`+84901234567`, `0901 234 567` -> `0901234567`) an
 #### POST /customers
 
 **Request body**: `{ "fullName": "required", "phone": "optional", "email": "optional" }` — `customerCode` (`KH000001`) is generated.
-**Response 201**: customer. **Errors**: `400` invalid phone/email, `409 DUPLICATE_VALUE` (phone).
+**Response 201 — `data` field of the envelope**: customer. **Errors**: `400` invalid phone/email, `409 DUPLICATE_VALUE` (phone).
 
 #### PATCH /customers/:id
 
@@ -383,7 +386,7 @@ Line rules (UC-03 E2): at least one line, one line per product, `quantity` a who
 #### GET /purchases
 
 **Query**: `search` (purchase number), `status`, `supplierId`, `from`, `to` (creation date), `page`, `pageSize`.
-**Response 200**: paginated list (supplier and creator summaries, no lines).
+**Response 200 — `data` field of the envelope**: paginated list (supplier and creator summaries, no lines).
 
 #### GET /purchases/:id
 
@@ -400,25 +403,25 @@ Line rules (UC-03 E2): at least one line, one line per product, `quantity` a who
   "receiveNow": "boolean, optional — create and receive in one transaction"
 }
 ```
-**Response 201**: purchase detail (`DRAFT`, or `RECEIVED` with `receiveNow`). Stock is untouched while `DRAFT`.
+**Response 201 — `data` field of the envelope**: purchase detail (`DRAFT`, or `RECEIVED` with `receiveNow`). Stock is untouched while `DRAFT`.
 **Errors**: `400`, `422 SUPPLIER_NOT_FOUND | SUPPLIER_INACTIVE | PRODUCT_UNAVAILABLE | INVALID_PURCHASE_LINE | INVALID_QUANTITY`.
 
 #### PATCH /purchases/:id
 
 **Description**: Edit a `DRAFT`: `supplierId?`, `note?` (null clears), `items?` (when present, replaces all lines).
-**Response 200**: purchase detail.
+**Response 200 — `data` field of the envelope**: purchase detail.
 **Errors**: `404`, `409 PURCHASE_ALREADY_RECEIVED | PURCHASE_CANCELLED`, `422` as for create.
 
 #### POST /purchases/:id/receive
 
 **Description**: DRAFT -> RECEIVED in one transaction. Locks the purchase row and re-checks the status, checks that the supplier and all products are active, locks products in id order, then for each line: `stock += quantity`, `cost = round2((oldQty*oldCost + qty*unitCost) / (oldQty + qty))` (or `unitCost` when `oldQty = 0`), writes a `PURCHASE` movement; sets `receivedAt`/`receivedBy`.
-**Response 200**: purchase detail.
+**Response 200 — `data` field of the envelope**: purchase detail.
 **Errors**: `404`, `409 PURCHASE_ALREADY_RECEIVED` (also when two requests race: one wins), `409 PURCHASE_CANCELLED`, `422 SUPPLIER_INACTIVE | PRODUCT_UNAVAILABLE` (everything rolled back).
 
 #### POST /purchases/:id/cancel
 
 **Description**: DRAFT -> CANCELLED. Purchases are never deleted.
-**Response 200**: purchase detail. **Errors**: `404`, `409 PURCHASE_ALREADY_RECEIVED | PURCHASE_CANCELLED`.
+**Response 200 — `data` field of the envelope**: purchase detail. **Errors**: `404`, `409 PURCHASE_ALREADY_RECEIVED | PURCHASE_CANCELLED`.
 
 ---
 
@@ -462,7 +465,7 @@ Rules:
 - Payments: 1-10 entries whose `amount`s sum **exactly** to the total. CASH: `tenderedAmount >= amount` (default = amount), `changeAmount = tendered - amount`. Other methods: tendered = amount, change = 0.
 - Points (BR6): `floor(total / POINTS_PER_VND)` (default 10000), only with a customer.
 
-**Response 201**: sale detail.
+**Response 201 — `data` field of the envelope**: sale detail.
 **Error codes**:
 - `400` — validation (empty cart, quantity 0/negative/fractional, ...)
 - `404` — `CUSTOMER_NOT_FOUND`
@@ -472,18 +475,30 @@ Rules:
 #### GET /sales
 
 **Roles**: ADMIN, CASHIER (a cashier sees all sales)
-**Query**: `search` (invoice number), `customerId`, `cashierId`, `from`, `to`, `page`, `pageSize`.
-**Response 200**: paginated sales (newest first) with `customer`, `cashier` summaries and `payments: [{ method, amount }]`.
+**Query** (all optional, combined with AND):
+
+| Param | Meaning |
+|-------|---------|
+| `search` | Partial match on the invoice number |
+| `customerId` | Exact customer id |
+| `customerQuery` | Partial match on the customer's **phone or customer code** (max 30 chars). The phone part is normalised like other phone inputs, so `+84 912 345 678`, `84912345678` and `912345678` all find `0912345678`; a code fragment such as `KH0001` matches `KH000123` (case-insensitive). Sales without a customer never match. |
+| `paymentMethod` | `CASH`, `CARD`, `TRANSFER` or `OTHER`: only sales with at least one payment of that method (a split payment matches each of its methods). Any other value answers `400 VALIDATION_ERROR` |
+| `cashierId` | Exact cashier id |
+| `from`, `to` | `YYYY-MM-DD` store-day range, `to` inclusive |
+| `page`, `pageSize` | Pagination |
+
+Example: `GET /sales?customerQuery=0987&paymentMethod=TRANSFER&from=2026-10-01`.
+**Response 200 — `data` field of the envelope**: paginated sales (newest first) with `customer`, `cashier` summaries and `payments: [{ method, amount }]`.
 
 #### GET /sales/:id
 
-**Roles**: ADMIN, CASHIER. **Response 200**: sale detail. **Errors**: `404 SALE_NOT_FOUND`.
+**Roles**: ADMIN, CASHIER. **Response 200 — `data` field of the envelope**: sale detail. **Errors**: `404 SALE_NOT_FOUND`.
 
 #### GET /sales/:id/print
 
 **Roles**: ADMIN, CASHIER
 **Description**: Print-friendly receipt payload. Read-only: reprinting never creates a sale (UC-02 E7).
-**Response 200**:
+**Response 200 — `data` field of the envelope**:
 ```json
 {
   "store": { "name": "from STORE_NAME", "address": "STORE_ADDRESS", "phone": "STORE_PHONE" },
@@ -506,24 +521,24 @@ Rules:
 
 **Roles**: ADMIN, CASHIER, STOCKKEEPER (cashiers: current stock only; no cost data is returned here)
 **Query**: `search` (name, SKU, barcode), `categoryId`, `lowStock=true` (stock <= reorder level), `isActive` (default `true`), `page`, `pageSize`.
-**Response 200**: paginated `{ productId, sku, barcode, name, unit, categoryId, categoryName, stockQty, reorderLevel, isLowStock, isActive }`.
+**Response 200 — `data` field of the envelope**: paginated `{ productId, sku, barcode, name, unit, categoryId, categoryName, stockQty, reorderLevel, isLowStock, isActive }`.
 
 #### GET /inventory/low-stock
 
 **Roles**: ADMIN, STOCKKEEPER
-**Query**: `search`, `categoryId`, `page`, `pageSize`. **Response 200**: same item shape, active products with `stockQty <= reorderLevel`.
+**Query**: `search`, `categoryId`, `page`, `pageSize`. **Response 200 — `data` field of the envelope**: same item shape, active products with `stockQty <= reorderLevel`.
 
 #### GET /inventory/movements
 
 **Roles**: ADMIN, STOCKKEEPER
 **Query**: `productId`, `type` (`PURCHASE | SALE | ADJUSTMENT | REVERSAL`), `from`, `to`, `page`, `pageSize`.
-**Response 200**: paginated movements (newest first): `{ id, productId, product:{id,sku,name,unit}, movementType, quantityChange (signed), referenceType, referenceId, createdBy, creator:{id,fullName}, note, createdAt }`.
+**Response 200 — `data` field of the envelope**: paginated movements (newest first): `{ id, productId, product:{id,sku,name,unit}, movementType, quantityChange (signed), referenceType, referenceId, createdBy, creator:{id,fullName}, note, createdAt }`.
 
 #### GET /inventory/stock-counts
 
 **Roles**: ADMIN, STOCKKEEPER
 **Query**: `productId`, `from`, `to`, `page`, `pageSize`.
-**Response 200**: paginated `{ id, countNo, productId, product, systemQty, countedQty, difference, reason, createdBy, creator, createdAt }`.
+**Response 200 — `data` field of the envelope**: paginated `{ id, countNo, productId, product, systemQty, countedQty, difference, reason, createdBy, creator, createdAt }`.
 
 #### POST /inventory/stock-counts
 
@@ -539,7 +554,7 @@ Rules:
   "expectedSystemQty": "the stock the user saw"
 }
 ```
-**Response 201**:
+**Response 201 — `data` field of the envelope**:
 ```json
 {
   "stockCount": { "id": 1, "countNo": "KK202610020001", "systemQty": 10, "countedQty": 7, "difference": -3, "reason": "...", "createdAt": "...", "creator": { "id": 3, "fullName": "..." }, "product": { "id": 1, "sku": "...", "name": "...", "unit": "..." } },
@@ -557,7 +572,7 @@ All reports require `from` and `to` (`YYYY-MM-DD`, store time, `to` inclusive). 
 #### GET /reports/revenue
 
 **Roles**: ADMIN · **Query**: `from`, `to`, `groupBy=day|month` (default `day`).
-**Response 200**:
+**Response 200 — `data` field of the envelope**:
 ```json
 {
   "from": "2026-10-01", "to": "2026-10-02", "generatedAt": "...", "groupBy": "day",
@@ -570,19 +585,19 @@ All reports require `from` and `to` (`YYYY-MM-DD`, store time, `to` inclusive). 
 #### GET /reports/top-products
 
 **Roles**: ADMIN · **Query**: `from`, `to`, `limit` (1-100, default 10), `sortBy=quantity|revenue` (default `quantity`).
-**Response 200**: `{ ..., sortBy, limit, rows: [{ rank, productId, sku, name, quantitySold, revenue }] }`.
+**Response 200 — `data` field of the envelope**: `{ ..., sortBy, limit, rows: [{ rank, productId, sku, name, quantitySold, revenue }] }`.
 
 #### GET /reports/gross-profit
 
 **Roles**: ADMIN · **Query**: `from`, `to`, `groupBy=day|month`.
-**Response 200**: `{ ..., groupBy, rows: [{ period, invoiceCount, revenue, cogs, grossProfit, marginPercent }], totals: { invoiceCount, revenue, cogs, grossProfit, marginPercent } }`.
+**Response 200 — `data` field of the envelope**: `{ ..., groupBy, rows: [{ period, invoiceCount, revenue, cogs, grossProfit, marginPercent }], totals: { invoiceCount, revenue, cogs, grossProfit, marginPercent } }`.
 `revenue` = sum of line totals (after discount allocation), `cogs` = sum of `qty * unitCostSnapshot`, `marginPercent` = `grossProfit / revenue * 100` rounded to 2 decimals (0 when revenue is 0). This is an estimated gross profit (BR8).
 
 #### GET /reports/inventory
 
 **Roles**: ADMIN, STOCKKEEPER
 **Query**: `from`, `to` (movement window), `categoryId`, `search`, `isActive` (omit to include inactive products that still hold stock), `page`, `pageSize`.
-**Response 200**:
+**Response 200 — `data` field of the envelope**:
 ```json
 {
   "from": "...", "to": "...", "generatedAt": "...",

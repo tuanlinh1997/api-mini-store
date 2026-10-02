@@ -30,6 +30,7 @@ Read by: All agents. Check this file before proposing changes that may conflict 
 | ADR-006 | Money and quantities as DECIMAL, whole units in v1 | Accepted | 2026-10-02 |
 | ADR-007 | Stockkeeper product permission and the single permission matrix | Accepted | 2026-10-02 |
 | ADR-008 | One response envelope for success and errors, centralised error mapping | Accepted | 2026-10-02 |
+| ADR-009 | Structured JSON logging with pino and refresh-token reuse detection | Accepted | 2026-10-02 |
 
 ---
 
@@ -228,6 +229,34 @@ Option 3. `ResponseEnvelopeInterceptor` wraps every success (lists via an explic
 - **Positive**: one shape for clients to parse; consistent `requestId` for support; no accidental 500s for known DB conditions; one place to extend mapping.
 - **Negative**: every payload is nested under `data` (breaking change vs the earlier unwrapped bodies); Swagger models for `data` are generic objects for endpoints that return Prisma payload types.
 - **Neutral**: the legacy `error` (status text) field was dropped from error bodies.
+
+---
+
+## ADR-009: Structured JSON logging with pino and refresh-token reuse detection
+
+**Date**: 2026-10-02
+**Status**: Accepted
+**Deciders**: Project owner (review feedback) / @backend-developer
+
+### Context
+Production support needs logs that can be searched by request, user and error code, with usable stack traces, and that never contain secrets. Separately, ADR-003 accepted that replaying an already-rotated refresh token merely failed; a stolen token that is replayed after the legitimate client rotated it should instead end the session.
+
+### Options Considered
+1. **Keep Nest's built-in text logger**: Pros: no dependency. Cons: unstructured lines, no per-request context, redaction by hand.
+2. **winston/bunyan**: Pros: familiar. Cons: slower, no first-class Nest request-context integration.
+3. **`nestjs-pino` (pino + pino-http)**: Pros: JSON by default, fast, built-in redaction, request-scoped child loggers via AsyncLocalStorage, routes existing `Logger` calls through pino. Cons: one more dependency set; `pino-pretty` needed for readable dev output.
+
+For tokens: (a) do nothing; (b) store a token *family* table and revoke the family; (c) keep the previous hash on the session row and revoke the session when it is presented.
+
+### Decision
+Option 3 for logging: JSON lines on stdout carrying `requestId` (the inbound `X-Request-Id` or a generated UUID, the same id as the response envelope), `userId` and `role` when authenticated, method, route pattern and response time; authorization/cookie headers, `password`, `refreshToken` and `accessToken` are redacted and request bodies are never logged; `pino-pretty` only when `NODE_ENV=development`; the app is started with `node --enable-source-maps` so stack frames point at `.ts` lines. The exception filter logs 5xx at `error` with the stack, domain errors (any `AppException`, 409, 422) at `warn` with code and route, and other client errors (validation 400, 404) at `debug`.
+
+Option (c) for tokens: `user_sessions.previous_refresh_token_hash` (nullable, unique) holds the hash replaced by the last rotation. A refresh with an unknown current token whose hash equals some session's previous hash revokes that session and logs a warning. A separate `@nestjs/schedule` job deletes sessions expired or revoked more than `SESSION_RETENTION_DAYS` ago, so the table stays small.
+
+### Consequences
+- **Positive**: searchable, safe logs; a replayed refresh token ends the session instead of silently failing; the session table cannot grow without bound.
+- **Negative**: only one generation of history is kept (older stolen tokens just fail); a legitimate client that retries a refresh with an old token (for example two tabs refreshing at once) can be logged out and must sign in again; log volume is higher because every request writes a completion line.
+- **Neutral**: supersedes the "re-use of a rotated token simply fails" consequence of ADR-003. The throttler is still in-memory; a shared store remains open in task #006 before running several instances.
 
 ---
 

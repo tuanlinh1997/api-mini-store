@@ -33,7 +33,7 @@ curl -s -X POST http://localhost:3000/api/v1/auth/login \
 | Command | What it does |
 |---------|--------------|
 | `npm run start:dev` | Dev server with watch |
-| `npm run build` · `npm start` | Compile to `dist/`, run the build |
+| `npm run build` · `npm start` / `npm run start:prod` | Compile to `dist/`, run the build (with `--enable-source-maps`, JSON logs) |
 | `npm run lint` · `npm run typecheck` | ESLint · TypeScript check |
 | `npm test` | Unit tests (no database needed) |
 | `npm run test:e2e` | E2E tests against a real MySQL database `mini_store_test` (migrations applied automatically; override with `TEST_DATABASE_URL`, name must end with `_test`) |
@@ -41,7 +41,10 @@ curl -s -X POST http://localhost:3000/api/v1/auth/login \
 | `npm run prisma:deploy` | Apply committed migrations |
 | `npm run prisma:seed` | Base seed: users and a small catalog (idempotent) |
 | `npm run seed:demo -- --reset` | Fill every table with ~90 days of consistent demo data (dev DB only; refuses production/test DBs) |
-| `npm run seed:demo:verify` | 24 PASS/FAIL consistency checks on the demo data |
+| `npm run seed:demo:verify` | 24 PASS/FAIL consistency checks on the demo data (`-- --database-url=...` to check another database) |
+| `npm run db:backup` | Gzipped, timestamped `mysqldump` into `BACKUP_DIR` (default `./backups`), keeps the newest `BACKUP_RETENTION_COUNT` |
+| `npm run db:restore -- --file=<backup> --target=<db>` | Restore a backup into another database (refuses the `DATABASE_URL` database and production without `--force`) |
+| `npm run db:compare -- --source=<db> --target=<db>` | Compare row counts per table of two databases |
 
 Create the databases once: `CREATE DATABASE mini_store CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;` and the same for `mini_store_test`. `docker-compose.yml` provides an optional MySQL 8 service (`mini_store` is created automatically).
 
@@ -50,7 +53,7 @@ Create the databases once: `CREATE DATABASE mini_store CHARACTER SET utf8mb4 COL
 | Doc | Content |
 |-----|---------|
 | [docs/backend/API.md](docs/backend/API.md) | Every endpoint: roles, request, response, error codes |
-| [docs/backend/BACKEND.md](docs/backend/BACKEND.md) | Module layout, auth flow, transactions/locking, numbering, configuration |
+| [docs/backend/BACKEND.md](docs/backend/BACKEND.md) | Module layout, auth flow, transactions/locking, numbering, logging, scheduled jobs, backup & restore runbook, configuration |
 | [docs/database/DATABASE.md](docs/database/DATABASE.md) | Tables, constraints, indexes, ER diagram, migrations |
 | [docs/architecture/DECISIONS.md](docs/architecture/DECISIONS.md) | Architecture decisions and the defaults chosen for the SRS open questions |
 

@@ -23,6 +23,7 @@ Conventions: `snake_case` tables/columns, auto-increment `INT` primary keys (ses
 erDiagram
     users ||--o{ user_sessions : "has"
     users ||--o{ purchases : "created_by"
+    users ||--o{ purchases : "received_by"
     users ||--o{ sales : "cashier_id"
     users ||--o{ inventory_movements : "created_by"
     users ||--o{ stock_counts : "created_by"
@@ -71,13 +72,14 @@ One row per login. The access JWT carries `id` as its `sid` claim.
 | id | char(36) | PK (uuid) | Session id |
 | user_id | int | NOT NULL, FK users | |
 | refresh_token_hash | char(64) | NOT NULL, UNIQUE | SHA-256 hex of the opaque refresh token |
+| previous_refresh_token_hash | char(64) | NULL, UNIQUE | Hash of the token the last rotation replaced; presenting it again is token reuse and revokes the session (migration `20261002100100`) |
 | expires_at | datetime(3) | NOT NULL | Sliding; extended on rotation |
 | revoked_at | datetime(3) | NULL | Set on logout / lock / password reset |
 | user_agent | varchar(255) | NULL | |
 | ip | varchar(64) | NULL | |
 | created_at | datetime(3) | NOT NULL | |
 
-Index: `idx_user_sessions_user_id_revoked_at (user_id, revoked_at)`.
+Index: `idx_user_sessions_user_id_revoked_at (user_id, revoked_at)`. Rows whose `expires_at` or `revoked_at` is older than `SESSION_RETENTION_DAYS` (default 30) are deleted by the daily cleanup job (see `docs/backend/BACKEND.md`); sessions are the only table that is purged.
 
 ### categories
 
@@ -148,10 +150,10 @@ Index: `idx_customers_full_name`.
 | subtotal, total | decimal(12,2) | NOT NULL, CHECK >= 0 | Server-computed |
 | note | varchar(1000) | NULL | |
 | received_at | datetime(3) | NULL | Set when RECEIVED |
-| received_by | int | NULL | User who confirmed receipt (added to the SRS design) |
+| received_by | int | NULL, FK users (RESTRICT) | User who confirmed receipt (added to the SRS design); foreign key added in migration `20261002100000` |
 | created_at, updated_at | datetime(3) | NOT NULL | |
 
-Indexes: `idx_purchases_supplier_id`, `idx_purchases_created_by`, `idx_purchases_status_created_at`, `idx_purchases_created_at`.
+Indexes: `idx_purchases_supplier_id`, `idx_purchases_created_by`, `idx_purchases_received_by`, `idx_purchases_status_created_at`, `idx_purchases_created_at`. Prisma relations: `creator` (`PurchaseCreator`) and `receiver` (`PurchaseReceiver`); on `User` they are `purchasesCreated` and `purchasesReceived`.
 
 ### purchase_items
 
@@ -289,6 +291,10 @@ Rollback: Prisma has no automatic down-migrations. By project convention each mi
 | Migration | Contents |
 |-----------|----------|
 | `20261002043358_init_schema` | All tables, enums, indexes, foreign keys, and CHECK constraints |
+| `20261002100000_add_purchases_received_by_fk` | Index `idx_purchases_received_by` and foreign key `purchases_received_by_fkey` (`received_by` -> `users.id`, ON DELETE RESTRICT, ON UPDATE CASCADE). Fails if an orphan `received_by` exists (the dev database had none) instead of rewriting data. `down.sql` drops the constraint and the index |
+| `20261002100100_add_session_previous_token_hash` | Nullable `user_sessions.previous_refresh_token_hash` CHAR(64) with a unique index, for refresh-token reuse detection. No backfill needed. `down.sql` drops the index and column (sessions themselves are untouched) |
+
+Both `down.sql` files were exercised on a scratch database (apply all, run the downs in reverse, apply again) and `prisma migrate diff` reports no drift between the migrations and `schema.prisma`.
 
 Naming deviation: `.claude/rules/migrations.md` suggests `YYYYMMDD_NNN_description.sql`; Prisma requires its own `<timestamp>_<name>` directory layout, which is used instead.
 
@@ -300,4 +306,4 @@ Naming deviation: `.claude/rules/migrations.md` suggests `YYYYMMDD_NNN_descripti
 
 ## Backup
 
-Daily MySQL backup and a tested restore procedure (NF7) are not configured yet; tracked in `TODO.md`.
+Backups are logical dumps made by `npm run db:backup` (`mysqldump --single-transaction --routines --triggers --set-gtid-purged=OFF`, gzipped, timestamped, newest `BACKUP_RETENTION_COUNT` kept in `BACKUP_DIR`). `npm run db:restore -- --file=... --target=<db>` loads one into another database (it refuses the `DATABASE_URL` database and `NODE_ENV=production` without `--force`), `npm run db:compare` compares row counts and `npm run seed:demo:verify -- --database-url=...` runs the integrity checks on a restored copy. The schedule (Windows Task Scheduler / cron), the restore runbook and a recorded rehearsal are in `docs/backend/BACKEND.md`, section "Backup & restore". Because the dump omits `CREATE DATABASE`/`USE`, a backup restores under any name; `_prisma_migrations` is part of the dump, so `prisma migrate deploy` afterwards only applies migrations newer than the backup.
