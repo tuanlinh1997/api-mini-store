@@ -1,18 +1,28 @@
-# Optional local MySQL for development. The app does not require Docker.
+# Mini Store stack: MySQL 8 + one-shot migrations + API. See docs/devops/DEVOPS.md.
+#
+#   cp .env.example .env     # set JWT_ACCESS_SECRET (>= 32 chars) and review the rest
+#   docker compose up -d --build            # mysql -> migrate -> api
+#   docker compose up -d mysql              # database only (local development with `npm run start:dev`)
+#
+# The demo/base seed is never run by this stack. Run it manually (see DEVOPS.md).
 services:
   mysql:
     image: mysql:8.0
     container_name: mini-store-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
-      MYSQL_DATABASE: mini_store
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mini_store}
+      # Set a real root password for anything but a throwaway local database (URL-safe characters only,
+      # it is embedded in DATABASE_URL below). When it is empty, root has an empty password (dev only).
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-}
+      MYSQL_ALLOW_EMPTY_PASSWORD: ${MYSQL_ALLOW_EMPTY_PASSWORD:-yes}
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --default-time-zone=+00:00
     ports:
-      - "3306:3306"
+      # Loopback only; the api container reaches MySQL over the compose network.
+      - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
     volumes:
       - mini_store_mysql:/var/lib/mysql
     healthcheck:
@@ -20,6 +30,66 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # One-shot: applies committed migrations (prisma migrate deploy), then exits. Never seeds.
+  migrate:
+    build:
+      context: .
+      target: migrate
+    image: mini-store-api-migrate:local
+    restart: "no"
+    environment:
+      DATABASE_URL: mysql://root:${MYSQL_ROOT_PASSWORD:-}@mysql:3306/${MYSQL_DATABASE:-mini_store}
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      target: runtime
+    image: mini-store-api:local
+    container_name: mini-store-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Values below win over .env: inside the compose network the database host is `mysql`, not 127.0.0.1.
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      DATABASE_URL: mysql://root:${MYSQL_ROOT_PASSWORD:-}@mysql:3306/${MYSQL_DATABASE:-mini_store}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # healthcheck (GET /api/v1/health) is defined in the Dockerfile
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   mini_store_mysql:
