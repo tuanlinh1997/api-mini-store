@@ -134,7 +134,7 @@ export class InventoryService {
   ): Promise<StockCountResult> {
     const countedQty = assertNonNegativeIntegerQuantity(dto.countedQty, 'Số lượng đếm');
     const expectedSystemQty = toDecimal(dto.expectedSystemQty);
-    const stockCountId = await this.prisma.$transaction(async (tx) => {
+    const stockCountId = await this.prisma.runWriteTransaction(async (tx) => {
       const locked = await lockProductsForUpdate(tx, [dto.productId]);
       const product = locked.get(dto.productId);
       if (!product) {

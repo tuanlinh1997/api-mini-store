@@ -78,7 +78,7 @@ export class UsersService {
   }
 
   async update(id: number, dto: UpdateUserDto): Promise<UserView> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.runWriteTransaction(async (tx) => {
       const user = await this.requireUser(tx, id);
       const isDemotion =
         dto.role !== undefined && dto.role !== Role.ADMIN && user.role === Role.ADMIN;
@@ -101,7 +101,7 @@ export class UsersService {
         'Bạn không thể tự khóa tài khoản của chính mình.',
       );
     }
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.runWriteTransaction(async (tx) => {
       const user = await this.requireUser(tx, id);
       if (!isActive && user.isActive && user.role === Role.ADMIN) {
         await this.assertAnotherActiveAdminExists(tx, id);
@@ -120,7 +120,7 @@ export class UsersService {
 
   async resetPassword(id: number, dto: ResetPasswordDto): Promise<void> {
     const passwordHash = await this.passwords.hash(dto.newPassword);
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.runWriteTransaction(async (tx) => {
       await this.requireUser(tx, id);
       await tx.user.update({ where: { id }, data: { passwordHash } });
       await this.revokeAllSessions(tx, id);

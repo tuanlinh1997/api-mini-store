@@ -106,7 +106,7 @@ export class SalesService {
    */
   async checkout(dto: CreateSaleDto, user: AuthenticatedUser): Promise<SaleDetail> {
     const cart = mergeCartItems(dto.items);
-    const saleId = await this.prisma.$transaction(
+    const saleId = await this.prisma.runWriteTransaction(
       (tx) => this.executeCheckout(tx, cart, dto, user),
       WRITE_TRANSACTION_OPTIONS,
     );

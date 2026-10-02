@@ -58,7 +58,7 @@ export class CustomersService {
   }
 
   async create(dto: CreateCustomerDto): Promise<Customer> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.runWriteTransaction(async (tx) => {
       const customerCode = await this.documentNumbers.nextCustomerCode(tx);
       return tx.customer.create({
         data: { customerCode, fullName: dto.fullName, phone: dto.phone, email: dto.email },

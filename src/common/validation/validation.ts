@@ -7,6 +7,8 @@ import {
 import { Transform } from 'class-transformer';
 import { IsNumber, Matches, Max, Min } from 'class-validator';
 
+import { translateConstraint } from './validation-messages';
+
 export interface FieldIssue {
   field: string;
   messages: string[];
@@ -16,7 +18,14 @@ function flattenErrors(errors: ValidationError[], parentPath = ''): FieldIssue[]
   return errors.flatMap((error) => {
     const path = parentPath ? `${parentPath}.${error.property}` : error.property;
     const own: FieldIssue[] = error.constraints
-      ? [{ field: path, messages: Object.values(error.constraints) }]
+      ? [
+          {
+            field: path,
+            messages: Object.entries(error.constraints).map(([constraint, message]) =>
+              translateConstraint(error.property, constraint, message),
+            ),
+          },
+        ]
       : [];
     return [...own, ...flattenErrors(error.children ?? [], path)];
   });

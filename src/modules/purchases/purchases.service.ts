@@ -56,7 +56,7 @@ export class PurchasesService {
   /** Creates a DRAFT purchase; with `receiveNow` it is received in the same transaction. */
   async create(dto: CreatePurchaseDto, user: AuthenticatedUser): Promise<PurchaseDetail> {
     const lines = buildPurchaseLines(dto.items);
-    const purchaseId = await this.prisma.$transaction(async (tx) => {
+    const purchaseId = await this.prisma.runWriteTransaction(async (tx) => {
       await this.assertSupplierActive(tx, dto.supplierId);
       await this.assertProductsActive(tx, lines);
       const purchase = await tx.purchase.create({
@@ -81,7 +81,7 @@ export class PurchasesService {
   }
 
   async update(id: number, dto: UpdatePurchaseDto): Promise<PurchaseDetail> {
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.runWriteTransaction(async (tx) => {
       const purchase = await this.lockPurchase(tx, id);
       this.assertDraft(purchase.status);
       if (dto.supplierId !== undefined) {
@@ -111,7 +111,7 @@ export class PurchasesService {
   }
 
   async cancel(id: number): Promise<PurchaseDetail> {
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.runWriteTransaction(async (tx) => {
       const purchase = await this.lockPurchase(tx, id);
       this.assertDraft(purchase.status);
       await tx.purchase.update({ where: { id }, data: { status: PurchaseStatus.CANCELLED } });
@@ -121,7 +121,7 @@ export class PurchasesService {
 
   /** UC-03: the DRAFT -> RECEIVED transition is the only thing that increases stock. */
   async receive(id: number, user: AuthenticatedUser): Promise<PurchaseDetail> {
-    await this.prisma.$transaction(
+    await this.prisma.runWriteTransaction(
       (tx) => this.receiveWithinTransaction(tx, id, user.id),
       WRITE_TRANSACTION_OPTIONS,
     );
