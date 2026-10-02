@@ -27,6 +27,7 @@ import {
   SaleLineInput,
 } from './domain/sale-calculator';
 import { CartItemDto, CreateSaleDto, ListSalesQueryDto } from './dto/sales.dto';
+import { customerMatching } from './sale-filters';
 
 const SALE_DETAIL_INCLUDE = {
   items: { orderBy: { id: 'asc' } },
@@ -119,6 +120,8 @@ export class SalesService {
       cashierId: query.cashierId,
       soldAt: toOptionalUtcRange(query.from, query.to),
       ...(query.search ? { invoiceNo: { contains: query.search } } : {}),
+      ...(query.customerQuery ? { customer: { is: customerMatching(query.customerQuery) } } : {}),
+      ...(query.paymentMethod ? { payments: { some: { method: query.paymentMethod } } } : {}),
     };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.sale.findMany({

@@ -104,6 +104,18 @@ export class ListSalesQueryDto extends PaginationQueryDto {
   @Min(1)
   customerId?: number;
 
+  /** Matches the customer's phone (+84/84/0 forms accepted) or customer code, partial match. */
+  @IsOptional()
+  @TrimToUndefined()
+  @IsString()
+  @MaxLength(30)
+  customerQuery?: string;
+
+  /** Only sales that have at least one payment with this method. */
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

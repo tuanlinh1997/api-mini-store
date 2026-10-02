@@ -331,5 +331,64 @@ describe('POS checkout (e2e)', () => {
       expect(response.body.meta).toMatchObject({ page: 1, pageSize: 2 });
       expect(response.body.meta.total).toBeGreaterThan(0);
     });
+
+    describe('customer and payment method filters', () => {
+      let vipInvoiceNo: string;
+
+      beforeAll(async () => {
+        const vip = await context.prisma.customer.create({
+          data: { customerCode: 'KH-FILTER-VIP', fullName: 'Khach Loc', phone: '0987000111' },
+        });
+        const product = await createProduct(context.prisma, { salePrice: 10000, stockQty: 100 });
+        const sale = await checkout('cashier', {
+          customerId: vip.id,
+          items: [{ productId: product.id, quantity: 1 }],
+          payments: [{ method: 'TRANSFER', amount: 10000 }],
+        });
+        expect(sale.status).toBe(201);
+        vipInvoiceNo = sale.body.invoiceNo as string;
+      });
+
+      async function listSales(query: string): Promise<{ invoiceNo: string }[]> {
+        const response = await context
+          .http()
+          .get(`/api/v1/sales?${query}`)
+          .set('Authorization', await bearer(context, 'cashier'))
+          .expect(200);
+        return response.body.data as { invoiceNo: string }[];
+      }
+
+      it('filters by customer code (partial)', async () => {
+        const sales = await listSales('customerQuery=FILTER-VIP');
+        expect(sales.map((sale) => sale.invoiceNo)).toEqual([vipInvoiceNo]);
+      });
+
+      it('filters by customer phone in any accepted format', async () => {
+        for (const phone of ['0987000111', '987000111', '%2B84987000111', '84987000111']) {
+          const sales = await listSales(`customerQuery=${phone}`);
+          expect(sales.map((sale) => sale.invoiceNo)).toEqual([vipInvoiceNo]);
+        }
+      });
+
+      it('returns nothing for an unknown customer', async () => {
+        expect(await listSales('customerQuery=KH-DOES-NOT-EXIST')).toEqual([]);
+      });
+
+      it('filters by payment method', async () => {
+        const transfers = await listSales('paymentMethod=TRANSFER');
+        expect(transfers.map((sale) => sale.invoiceNo)).toEqual([vipInvoiceNo]);
+        const cash = await listSales('paymentMethod=CASH&pageSize=100');
+        expect(cash.map((sale) => sale.invoiceNo)).not.toContain(vipInvoiceNo);
+      });
+
+      it('combines both filters and rejects an unknown payment method', async () => {
+        expect(await listSales('customerQuery=FILTER-VIP&paymentMethod=CASH')).toEqual([]);
+        await context
+          .http()
+          .get('/api/v1/sales?paymentMethod=BITCOIN')
+          .set('Authorization', await bearer(context, 'cashier'))
+          .expect(400);
+      });
+    });
   });
 });
