@@ -1,7 +1,7 @@
 import { IncomingMessage } from 'node:http';
 
 import { Params } from 'nestjs-pino';
-import { stdTimeFunctions } from 'pino';
+import { stdSerializers, stdTimeFunctions } from 'pino';
 
 import { NodeEnvironment } from 'src/config/environment';
 
@@ -28,10 +28,13 @@ export const REDACTED_PATHS: string[] = [
   'req.body',
 ];
 
+/** pino-http invents this error for 5xx responses; the real one is logged by the exception filter. */
+const SYNTHETIC_RESPONSE_ERROR = /^failed with status code \d+$/;
 const REDACTED_PLACEHOLDER = '[REDACTED]';
 const PRETTY_TARGET = 'pino-pretty';
 
 const routes = new WeakMap<object, string>();
+const startedRequests = new WeakSet<object>();
 
 export function rememberRoute(rawRequest: object, route: string | undefined): void {
   if (route) {
@@ -62,7 +65,6 @@ export function buildLoggerParams(
     pinoHttp: {
       level: resolvePinoLevel(logLevel),
       timestamp: stdTimeFunctions.isoTime,
-      quietResLogger: true,
       genReqId: resolveRequestId,
       redact: { paths: REDACTED_PATHS, censor: REDACTED_PLACEHOLDER },
       serializers: {
@@ -71,11 +73,21 @@ export function buildLoggerParams(
           path: pathOf(request.url),
         }),
         res: (response: { statusCode: number }) => ({ statusCode: response.statusCode }),
+        err: (error: Error) =>
+          SYNTHETIC_RESPONSE_ERROR.test(error.message)
+            ? undefined
+            : stdSerializers.errWithCause(error),
       },
-      customProps: (request: IncomingMessage) => ({
-        requestId: resolveRequestId(request),
-        route: routes.get(request),
-      }),
+      // pino-http calls customProps when the request starts (bound to every log line of the
+      // request) and again when the response finishes (completion line only): the id goes into
+      // the first call and the route, which is known by then, into the second.
+      customProps: (request: IncomingMessage) => {
+        if (!startedRequests.has(request)) {
+          startedRequests.add(request);
+          return { requestId: resolveRequestId(request) };
+        }
+        return { route: routes.get(request) };
+      },
       customLogLevel: (_request, response, error) =>
         error || response.statusCode >= 500 ? 'error' : 'info',
       customSuccessMessage: (request, response) =>
