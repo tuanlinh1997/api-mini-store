@@ -1,3 +1,5 @@
+import { SessionCleanupService } from 'src/modules/auth/session-cleanup.service';
+
 import { bootTestContext, TEST_PASSWORD, TestContext } from './helpers/test-app';
 
 interface LoginBody {
@@ -109,16 +111,82 @@ describe('Auth (e2e)', () => {
     const second = (rotated.body as { data: LoginBody }).data;
     expect(second.refreshToken).not.toBe(first.refreshToken);
 
-    await context
-      .http()
-      .post('/api/v1/auth/refresh')
-      .send({ refreshToken: first.refreshToken })
-      .expect(401);
+    // The new tokens work first; replaying the old refresh token is covered by the reuse test.
     await context
       .http()
       .get('/api/v1/auth/me')
       .set('Authorization', `Bearer ${second.accessToken}`)
       .expect(200);
+    await context
+      .http()
+      .post('/api/v1/auth/refresh')
+      .send({ refreshToken: first.refreshToken })
+      .expect(401);
+  });
+
+  it('revokes the whole session when an already-rotated refresh token is replayed', async () => {
+    const first = await login('cashier');
+    const rotated = await context
+      .http()
+      .post('/api/v1/auth/refresh')
+      .send({ refreshToken: first.refreshToken })
+      .expect(200);
+    const second = (rotated.body as { data: LoginBody }).data;
+
+    // A stale client or an attacker replays the first token...
+    await context
+      .http()
+      .post('/api/v1/auth/refresh')
+      .send({ refreshToken: first.refreshToken })
+      .expect(401);
+
+    // ...which kills the session: the newest refresh token and its access token stop working.
+    await context
+      .http()
+      .post('/api/v1/auth/refresh')
+      .send({ refreshToken: second.refreshToken })
+      .expect(401);
+    await context
+      .http()
+      .get('/api/v1/auth/me')
+      .set('Authorization', `Bearer ${second.accessToken}`)
+      .expect(401);
+  });
+
+  it('purges sessions stale for longer than the retention period and keeps the rest', async () => {
+    const cleanup = context.app.get(SessionCleanupService);
+    const userId = context.users.cashier.id;
+    const daysAgo = (days: number): Date => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    const session = (tag: string, expiresAt: Date, revokedAt: Date | null) => ({
+      userId,
+      refreshTokenHash: tag.padEnd(64, '0'),
+      expiresAt,
+      revokedAt,
+    });
+    await context.prisma.userSession.createMany({
+      data: [
+        session('expired-long-ago', daysAgo(40), null),
+        session('revoked-long-ago', farFuture, daysAgo(35)),
+        session('expired-recently', daysAgo(5), null),
+        session('revoked-recently', farFuture, daysAgo(2)),
+        session('still-active', farFuture, null),
+      ],
+    });
+
+    expect(await cleanup.purgeStaleSessions()).toBe(2);
+
+    const remaining = await context.prisma.userSession.findMany({
+      where: {
+        refreshTokenHash: {
+          in: ['expired-recently', 'revoked-recently', 'still-active'].map((tag) =>
+            tag.padEnd(64, '0'),
+          ),
+        },
+      },
+    });
+    expect(remaining).toHaveLength(3);
+    expect(await cleanup.purgeStaleSessions()).toBe(0);
   });
 
   describe('locking a user', () => {

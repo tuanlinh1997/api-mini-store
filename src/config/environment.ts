@@ -68,6 +68,21 @@ export class EnvironmentVariables {
   @Min(1)
   REFRESH_TOKEN_TTL_DAYS: number = 7;
 
+  /** Turn the scheduled purge of stale sessions off (e.g. on all but one API instance). */
+  @Transform(parseBoolean)
+  @IsBoolean()
+  SESSION_CLEANUP_ENABLED: boolean = true;
+
+  /** Cron expression (server local time) of the stale-session purge; default daily at 03:00. */
+  @IsString()
+  @IsNotEmpty()
+  SESSION_CLEANUP_CRON: string = '0 3 * * *';
+
+  /** Sessions expired or revoked more than this many days ago are deleted. */
+  @IsInt()
+  @Min(1)
+  SESSION_RETENTION_DAYS: number = 30;
+
   @IsInt()
   @Min(1)
   THROTTLE_TTL_SECONDS: number = 60;

@@ -75,7 +75,11 @@ export class AuthService {
       include: { user: true },
     });
     const now = new Date();
-    if (!session || session.revokedAt || session.expiresAt <= now || !session.user.isActive) {
+    if (!session) {
+      await this.revokeSessionIfTokenReused(currentHash, now);
+      throw this.invalidRefreshToken();
+    }
+    if (session.revokedAt || session.expiresAt <= now || !session.user.isActive) {
       throw this.invalidRefreshToken();
     }
 
@@ -84,12 +88,40 @@ export class AuthService {
     // Compare-and-set on the old hash: of two concurrent refreshes with one token, only one wins.
     const rotated = await this.prisma.userSession.updateMany({
       where: { id: session.id, refreshTokenHash: currentHash, revokedAt: null },
-      data: { refreshTokenHash: hashRefreshToken(nextRefreshToken), expiresAt: refreshExpiresAt },
+      data: {
+        refreshTokenHash: hashRefreshToken(nextRefreshToken),
+        previousRefreshTokenHash: currentHash,
+        expiresAt: refreshExpiresAt,
+      },
     });
     if (rotated.count !== 1) {
       throw this.invalidRefreshToken();
     }
     return this.buildTokens(session.user, session.id, nextRefreshToken, refreshExpiresAt);
+  }
+
+  /**
+   * Token-reuse detection: a token that was already rotated away is presented again, so either
+   * the client or an attacker holds a stale copy. The whole session is revoked, which forces a
+   * fresh login and invalidates whichever party holds the current token.
+   */
+  private async revokeSessionIfTokenReused(presentedHash: string, now: Date): Promise<void> {
+    const reusedSession = await this.prisma.userSession.findUnique({
+      where: { previousRefreshTokenHash: presentedHash },
+      select: { id: true, userId: true, revokedAt: true },
+    });
+    if (!reusedSession) {
+      return;
+    }
+    if (!reusedSession.revokedAt) {
+      await this.prisma.userSession.updateMany({
+        where: { id: reusedSession.id, revokedAt: null },
+        data: { revokedAt: now },
+      });
+    }
+    this.logger.warn(
+      `Refresh token reuse detected: session ${reusedSession.id} of user ${reusedSession.userId} revoked`,
+    );
   }
 
   async logout(sessionId: string): Promise<void> {

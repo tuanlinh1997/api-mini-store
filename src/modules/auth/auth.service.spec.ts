@@ -114,3 +114,109 @@ describe('AuthService.login', () => {
     expect(createdSessionData?.ip).toBe('127.0.0.1');
   });
 });
+
+describe('AuthService.refresh (token-reuse detection)', () => {
+  const user: User = {
+    id: 7,
+    username: 'cashier',
+    passwordHash: 'x',
+    fullName: 'Cashier',
+    role: Role.CASHIER,
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const currentToken = 'current-token';
+  const staleToken = 'stale-token';
+  const now = Date.now();
+
+  interface FakeSession {
+    id: string;
+    userId: number;
+    refreshTokenHash: string;
+    previousRefreshTokenHash: string | null;
+    expiresAt: Date;
+    revokedAt: Date | null;
+  }
+  let session: FakeSession;
+  let service: AuthService;
+  let revokeCalls: number;
+
+  function matches(candidate: FakeSession, where: Record<string, unknown>): boolean {
+    return Object.entries(where).every(
+      ([key, value]) => (candidate as unknown as Record<string, unknown>)[key] === value,
+    );
+  }
+
+  beforeEach(() => {
+    revokeCalls = 0;
+    session = {
+      id: 'session-1',
+      userId: user.id,
+      refreshTokenHash: hashRefreshToken(currentToken),
+      previousRefreshTokenHash: hashRefreshToken(staleToken),
+      expiresAt: new Date(now + 60_000),
+      revokedAt: null,
+    };
+    const prisma = {
+      userSession: {
+        findUnique: jest.fn(({ where }: { where: Record<string, unknown> }) =>
+          Promise.resolve(matches(session, where) ? { ...session, user } : null),
+        ),
+        updateMany: jest.fn(
+          ({ where, data }: { where: Record<string, unknown>; data: Partial<FakeSession> }) => {
+            if (!matches(session, where)) {
+              return Promise.resolve({ count: 0 });
+            }
+            if (data.revokedAt) {
+              revokeCalls += 1;
+            }
+            session = { ...session, ...data };
+            return Promise.resolve({ count: 1 });
+          },
+        ),
+      },
+    } as unknown as PrismaService;
+    const jwt = { signAsync: jest.fn().mockResolvedValue('jwt') } as unknown as JwtService;
+    const config = {
+      get: (key: string) => ({ ACCESS_TOKEN_TTL_SECONDS: 900, REFRESH_TOKEN_TTL_DAYS: 7 })[key],
+    } as unknown as ConfigService<EnvironmentVariables, true>;
+    service = new AuthService(prisma, jwt, new PasswordService(), config);
+  });
+
+  it('remembers the replaced token hash when rotating', async () => {
+    const result = await service.refresh({ refreshToken: currentToken });
+    expect(session.previousRefreshTokenHash).toBe(hashRefreshToken(currentToken));
+    expect(session.refreshTokenHash).toBe(hashRefreshToken(result.refreshToken));
+    expect(session.revokedAt).toBeNull();
+  });
+
+  it('revokes the whole session when an already-rotated token is presented again', async () => {
+    await expect(service.refresh({ refreshToken: staleToken })).rejects.toMatchObject({
+      code: ErrorCode.INVALID_REFRESH_TOKEN,
+    });
+    expect(session.revokedAt).toBeInstanceOf(Date);
+    // The legitimate (current) token no longer works either: the user must log in again.
+    await expect(service.refresh({ refreshToken: currentToken })).rejects.toMatchObject({
+      code: ErrorCode.INVALID_REFRESH_TOKEN,
+    });
+  });
+
+  it('does not revoke anything for a token that was never issued', async () => {
+    await expect(service.refresh({ refreshToken: 'random-garbage' })).rejects.toMatchObject({
+      code: ErrorCode.INVALID_REFRESH_TOKEN,
+    });
+    expect(revokeCalls).toBe(0);
+    expect(session.revokedAt).toBeNull();
+  });
+
+  it('revokes only once when the stale token is replayed repeatedly', async () => {
+    await expect(service.refresh({ refreshToken: staleToken })).rejects.toBeInstanceOf(
+      AppException,
+    );
+    await expect(service.refresh({ refreshToken: staleToken })).rejects.toBeInstanceOf(
+      AppException,
+    );
+    expect(revokeCalls).toBe(1);
+  });
+});

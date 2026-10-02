@@ -8,6 +8,7 @@ process.env.DATABASE_URL = resolveTestDatabaseUrl();
 process.env.JWT_ACCESS_SECRET = randomBytes(48).toString('base64url');
 process.env.LOG_LEVEL = 'silent';
 process.env.SWAGGER_ENABLED = 'false';
+process.env.SESSION_CLEANUP_ENABLED = 'false';
 process.env.CORS_ORIGINS = '';
 process.env.THROTTLE_LIMIT = '100000';
 process.env.LOGIN_THROTTLE_LIMIT = '100000';
