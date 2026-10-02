@@ -28,6 +28,16 @@ curl -s -X POST http://localhost:3000/api/v1/auth/login \
   -d '{"username":"cashier","password":"<SEED_DEMO_PASSWORD>"}'
 ```
 
+## Docker
+
+```bash
+cp .env.example .env                 # set JWT_ACCESS_SECRET; DATABASE_URL is overridden inside compose
+docker compose up -d --build         # mysql -> one-shot `prisma migrate deploy` -> api on :3000
+curl http://localhost:3000/api/v1/health
+```
+
+Migrations run automatically before the API starts; the seeds never do. Details (image design, env vars, debugging): [docs/devops/DEVOPS.md](docs/devops/DEVOPS.md).
+
 ## Scripts
 
 | Command | What it does |
