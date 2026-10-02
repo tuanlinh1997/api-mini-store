@@ -129,9 +129,33 @@ describe('Response envelope (e2e)', () => {
         success: false,
         statusCode: 400,
         code: 'VALIDATION_ERROR',
-        message: 'Yêu cầu không hợp lệ.',
+        message: 'Nội dung JSON không hợp lệ.',
         data: null,
       });
+      expect(response.body).not.toHaveProperty('details');
+    });
+
+    it('answers an empty JSON body with a 400 envelope', async () => {
+      const response = await context
+        .http()
+        .post('/api/v1/auth/login')
+        .set('Content-Type', 'application/json')
+        .send('');
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({
+        code: 'VALIDATION_ERROR',
+        message: 'Nội dung yêu cầu không được để trống.',
+      });
+    });
+
+    it('still blocks prototype-poisoning payloads', async () => {
+      const response = await context
+        .http()
+        .post('/api/v1/auth/login')
+        .set('Content-Type', 'application/json')
+        .send('{"__proto__": {"role": "ADMIN"}}');
+      expect(response.status).toBe(400);
+      expect(response.body).toMatchObject({ code: 'VALIDATION_ERROR' });
     });
 
     it('answers an unsupported content type with a 415 envelope', async () => {

@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { FastifyRequest } from 'fastify';
+import { PinoLogger } from 'nestjs-pino';
 
 import { IS_PUBLIC_KEY } from 'src/common/decorators/auth.decorators';
 import { AppException } from 'src/common/errors/app.exception';
@@ -26,6 +27,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly reflector: Reflector,
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
+    private readonly requestLogger: PinoLogger,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -64,6 +66,8 @@ export class JwtAuthGuard implements CanActivate {
       role: session.user.role,
       sessionId: session.id,
     };
+    // Every later log line of this request (and its completion line) carries who made it.
+    this.requestLogger.assign({ userId: session.user.id, role: session.user.role });
     return true;
   }
 

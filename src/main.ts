@@ -16,7 +16,9 @@ async function bootstrap(): Promise<void> {
     genReqId: generateRequestId,
     bodyLimit: 1024 * 1024,
   });
-  const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter);
+  const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter, {
+    bufferLogs: true,
+  });
   await configureApplication(app);
   await app.listen(env.PORT, env.HOST);
 

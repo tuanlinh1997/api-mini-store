@@ -100,14 +100,37 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const reply = http.getResponse<FastifyReply>();
     const envelope = this.toEnvelope(exception, request.id);
 
-    // Only server faults are logged as errors; client errors (4xx) are expected traffic.
-    if (envelope.statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
-      this.logger.error(
-        `[${request.id}] ${request.method} ${request.url.split('?')[0]} -> ${envelope.statusCode} ${envelope.code}`,
-        exception instanceof Error ? exception.stack : String(exception),
-      );
-    }
+    this.logException(exception, envelope, request);
     void reply.status(envelope.statusCode).send(envelope);
+  }
+
+  /**
+   * 5xx: error with the stack. Business rule failures (AppException, 409, 422): warn with code and
+   * route (requestId, userId and role come from the request-scoped logger context). Everything else (validation 400, 404, 429...) is expected traffic: debug.
+   * Request bodies are never logged, so passwords cannot leak through here.
+   */
+  private logException(exception: unknown, envelope: ErrorEnvelope, request: FastifyRequest): void {
+    const context = {
+      code: envelope.code,
+      statusCode: envelope.statusCode,
+      route: request.routeOptions?.url ?? request.url.split('?')[0],
+    };
+    const message = `${envelope.code}: ${envelope.message}`;
+    if (envelope.statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.logger.error({ ...context, err: exception }, message);
+    } else if (this.isBusinessError(exception, envelope.statusCode)) {
+      this.logger.warn(context, message);
+    } else {
+      this.logger.debug(context, message);
+    }
+  }
+
+  private isBusinessError(exception: unknown, statusCode: number): boolean {
+    return (
+      exception instanceof AppException ||
+      statusCode === HttpStatus.CONFLICT ||
+      statusCode === HttpStatus.UNPROCESSABLE_ENTITY
+    );
   }
 
   /** Pure mapping, exposed for unit tests. */

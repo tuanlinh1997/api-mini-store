@@ -2,11 +2,14 @@ import { ExecutionContext, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { LoggerModule } from 'nestjs-pino';
 
+import { generateRequestId } from 'src/app.setup';
 import { AllExceptionsFilter } from 'src/common/filters/all-exceptions.filter';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { ResponseEnvelopeInterceptor } from 'src/common/interceptors/response-envelope.interceptor';
+import { buildLoggerParams } from 'src/common/logging/logging.config';
 import { SequencesModule } from 'src/common/sequences/sequences.module';
 import { createValidationPipe } from 'src/common/validation/validation';
 import { EnvironmentVariables, validateEnvironment } from 'src/config/environment';
@@ -36,6 +39,15 @@ function isNotLoginRoute(context: ExecutionContext): boolean {
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnvironment, cache: true }),
+    LoggerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<EnvironmentVariables, true>) =>
+        buildLoggerParams(
+          config.get('LOG_LEVEL', { infer: true }),
+          config.get('NODE_ENV', { infer: true }),
+          (request) => generateRequestId({ headers: request.headers }),
+        ),
+    }),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<EnvironmentVariables, true>) => ({

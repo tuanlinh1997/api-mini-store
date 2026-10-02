@@ -1,4 +1,10 @@
-import { BadRequestException, HttpStatus, NotFoundException } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  BadRequestException,
+  HttpStatus,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { AppException } from 'src/common/errors/app.exception';
@@ -148,5 +154,61 @@ describe('AllExceptionsFilter', () => {
     expect(body.statusCode).toBe(500);
     expect(body.code).toBe(ErrorCode.INTERNAL_ERROR);
     expect(JSON.stringify(body)).not.toContain('ECONNREFUSED');
+  });
+});
+
+describe('AllExceptionsFilter logging', () => {
+  const filter = new AllExceptionsFilter();
+  const reply = { status: jest.fn().mockReturnThis(), send: jest.fn() };
+  const request = {
+    id: 'req-1',
+    method: 'POST',
+    url: '/api/v1/sales?token=secret',
+    routeOptions: { url: '/api/v1/sales' },
+    body: { password: 'hunter2' },
+  };
+  const host = {
+    switchToHttp: () => ({ getRequest: () => request, getResponse: () => reply }),
+  } as unknown as ArgumentsHost;
+  let errorLog: jest.SpyInstance;
+  let warnLog: jest.SpyInstance;
+  let debugLog: jest.SpyInstance;
+
+  beforeEach(() => {
+    errorLog = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    warnLog = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    debugLog = jest.spyOn(Logger.prototype, 'debug').mockImplementation();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('logs 5xx at error level together with the original error (stack)', () => {
+    const failure = new Error('boom');
+    filter.catch(failure, host);
+    expect(errorLog).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'INTERNAL_ERROR', statusCode: 500, err: failure }),
+      expect.stringContaining('INTERNAL_ERROR'),
+    );
+    expect(warnLog).not.toHaveBeenCalled();
+  });
+
+  it('logs business errors (AppException, 409, 422) at warn with code and route only', () => {
+    filter.catch(AppException.conflict(ErrorCode.INSUFFICIENT_STOCK, 'Không đủ tồn kho'), host);
+    expect(warnLog).toHaveBeenCalledWith(
+      { code: 'INSUFFICIENT_STOCK', statusCode: 409, route: '/api/v1/sales' },
+      expect.any(String),
+    );
+    expect(errorLog).not.toHaveBeenCalled();
+  });
+
+  it('logs plain validation errors at debug and never touches the request body', () => {
+    filter.catch(new BadRequestException(['name must not be empty']), host);
+    expect(debugLog).toHaveBeenCalledTimes(1);
+    expect(warnLog).not.toHaveBeenCalled();
+    const logged = JSON.stringify([...debugLog.mock.calls, ...warnLog.mock.calls]);
+    expect(logged).not.toContain('hunter2');
+    expect(logged).not.toContain('token=secret');
   });
 });

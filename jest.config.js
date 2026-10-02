@@ -6,6 +6,7 @@ module.exports = {
   transform: { '^.+[.]ts$': ['ts-jest', { tsconfig: 'tsconfig.json' }] },
   moduleNameMapper: { '^src/(.*)$': '<rootDir>/src/$1' },
   setupFiles: ['<rootDir>/test/silence-logs.ts'],
+  modulePathIgnorePatterns: ['<rootDir>/.claude/', '<rootDir>/dist/'],
   moduleFileExtensions: ['ts', 'js', 'json'],
   collectCoverageFrom: ['src/**/*.ts', '!src/main.ts', '!src/**/*.module.ts', '!src/**/dto/*.ts'],
   coverageDirectory: 'coverage',

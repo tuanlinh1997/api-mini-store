@@ -1,43 +1,46 @@
 import { randomUUID } from 'node:crypto';
 
-import { LogLevel, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from '@fastify/helmet';
 import { FastifyRequest } from 'fastify';
+import { Logger } from 'nestjs-pino';
 
+import { createJsonBodyParser } from 'src/common/validation/json-body-parser';
+import { rememberRoute } from 'src/common/logging/logging.config';
 import { EnvironmentVariables } from 'src/config/environment';
 
 export const GLOBAL_PREFIX = 'api/v1';
 export const SWAGGER_PATH = 'api/docs';
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
-const LOG_LEVELS: Record<string, LogLevel[]> = {
-  debug: ['fatal', 'error', 'warn', 'log', 'debug'],
-  log: ['fatal', 'error', 'warn', 'log'],
-  warn: ['fatal', 'error', 'warn'],
-  error: ['fatal', 'error'],
-  silent: [],
-};
 
-/** Reuses a sane inbound X-Request-Id, otherwise generates one. */
+const requestIds = new WeakMap<object, string>();
+
+/**
+ * Reuses a sane inbound X-Request-Id, otherwise generates one. The result is memoised per
+ * request (keyed by its headers object) so Fastify and pino-http agree on a single id.
+ */
 export function generateRequestId(request: { headers: FastifyRequest['headers'] }): string {
+  const known = requestIds.get(request.headers);
+  if (known) {
+    return known;
+  }
   const inbound = request.headers['x-request-id'];
-  return typeof inbound === 'string' && REQUEST_ID_PATTERN.test(inbound) ? inbound : randomUUID();
-}
-
-export function resolveLogLevels(level: string): LogLevel[] {
-  return LOG_LEVELS[level] ?? LOG_LEVELS.log ?? [];
+  const requestId =
+    typeof inbound === 'string' && REQUEST_ID_PATTERN.test(inbound) ? inbound : randomUUID();
+  requestIds.set(request.headers, requestId);
+  return requestId;
 }
 
 /**
  * Applies everything that is not module wiring: prefix, security headers, CORS, Swagger and
- * request logging. Shared by main.ts and the e2e tests so both run the same pipeline.
+ * the logger. Shared by main.ts and the e2e tests so both run the same pipeline.
  */
 export async function configureApplication(app: NestFastifyApplication): Promise<void> {
   const config = app.get<ConfigService<EnvironmentVariables, true>>(ConfigService);
-  app.useLogger(resolveLogLevels(config.get('LOG_LEVEL', { infer: true })));
+  app.useLogger(app.get(Logger));
   app.setGlobalPrefix(GLOBAL_PREFIX);
   app.enableShutdownHooks();
 
@@ -47,7 +50,23 @@ export async function configureApplication(app: NestFastifyApplication): Promise
   if (isSwaggerEnabled) {
     setupSwagger(app);
   }
-  registerRequestLogging(app);
+  registerRouteContext(app);
+  app.useBodyParser(
+    'application/json',
+    {},
+    createJsonBodyParser(app.getHttpAdapter().getInstance()),
+  );
+}
+
+/** Makes the matched route pattern (e.g. /api/v1/sales/:id) available to request logs. */
+function registerRouteContext(app: NestFastifyApplication): void {
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addHook('onRequest', (request, _reply, done) => {
+      rememberRoute(request.raw, request.routeOptions.url);
+      done();
+    });
 }
 
 async function registerSecurityHeaders(
@@ -100,19 +119,4 @@ function setupSwagger(app: NestFastifyApplication): void {
       .build(),
   );
   SwaggerModule.setup(SWAGGER_PATH, app, document);
-}
-
-function registerRequestLogging(app: NestFastifyApplication): void {
-  const logger = new Logger('HTTP');
-  app
-    .getHttpAdapter()
-    .getInstance()
-    .addHook('onResponse', (request, reply, done) => {
-      const path = request.url.split('?')[0];
-      logger.log(
-        `${request.id} ${request.method} ${path} ${reply.statusCode} ` +
-          `${Math.round(reply.elapsedTime)}ms user=${request.user?.id ?? '-'}`,
-      );
-      done();
-    });
 }
