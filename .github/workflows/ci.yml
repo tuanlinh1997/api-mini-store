@@ -1,0 +1,182 @@
+# CI pipeline for api-mini-store (NestJS 11 + Fastify + Prisma 6 + MySQL 8).
+#
+# Jobs (run in parallel; each is its own status check for branch protection):
+#   lint-typecheck   eslint + tsc --noEmit
+#   unit             jest unit tests with coverage (artifact: unit-coverage)
+#   build            nest build
+#   e2e              mysql:8.0 service, prisma migrate deploy, npm run test:e2e
+#   migration-drift  prisma migrate diff: migrations vs schema.prisma
+#
+# SECURITY: every credential in this file is a CI-only dummy value for a
+# throwaway service container that exists only for the duration of the job.
+# No real secrets are used or needed. Never reuse these values elsewhere.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master, 'feature/**']
+
+# One run per ref; a newer push cancels the older run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  lint-typecheck:
+    name: Lint and typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # tsc needs the generated Prisma client types.
+      - run: npx prisma generate
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Unit tests with coverage
+        run: npm run test:cov -- --ci
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-coverage
+          path: coverage/
+          if-no-files-found: warn
+          retention-days: 14
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: E2E tests (MySQL 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-only-mysql-root-password # CI-only dummy
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -p$MYSQL_ROOT_PASSWORD --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      # CI-only dummy values. test/test-env.ts refuses any DB not ending in _test.
+      TEST_DATABASE_URL: mysql://root:ci-only-mysql-root-password@127.0.0.1:3306/mini_store_test
+      DATABASE_URL: mysql://root:ci-only-mysql-root-password@127.0.0.1:3306/mini_store_test
+      JWT_ACCESS_SECRET: ci-only-jwt-secret-not-for-real-use-0123456789abcdef
+      NODE_ENV: test
+      LOG_LEVEL: silent
+      SWAGGER_ENABLED: 'false'
+      THROTTLE_LIMIT: '100000'
+      LOGIN_THROTTLE_LIMIT: '100000'
+      MAX_DISCOUNT_PERCENT_CASHIER: '10'
+      MAX_DISCOUNT_PERCENT_ADMIN: '100'
+      POINTS_PER_VND: '10000'
+      STORE_NAME: Test Store
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Create utf8mb4 test database
+        env:
+          MYSQL_PWD: ci-only-mysql-root-password # CI-only dummy
+        run: |
+          mysql -h 127.0.0.1 -u root -e "CREATE DATABASE IF NOT EXISTS mini_store_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+      # test/global-setup.ts also runs migrate deploy (idempotent, no-op here).
+      - name: E2E tests
+        run: npm run test:e2e
+
+  # Detects a schema.prisma change committed without a matching migration.
+  # Approach: replay prisma/migrations into a throw-away shadow database and diff
+  # the result against schema.prisma (--from-migrations --to-schema-datamodel).
+  # The hand-written CHECK constraints are not a problem: Prisma neither models
+  # nor introspects CHECK constraints, so they exist on the migration side but are
+  # invisible to the diff and cannot be reported as drift. The diff only sees
+  # tables, columns, indexes and foreign keys. --exit-code makes it fail (exit 2)
+  # when the schema has changes that no migration covers.
+  migration-drift:
+    name: Prisma migration drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-only-mysql-root-password # CI-only dummy
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -p$MYSQL_ROOT_PASSWORD --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DATABASE_URL: mysql://root:ci-only-mysql-root-password@127.0.0.1:3306/mini_store_drift
+      SHADOW_DATABASE_URL: mysql://root:ci-only-mysql-root-password@127.0.0.1:3306/mini_store_shadow
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Create shadow database
+        env:
+          MYSQL_PWD: ci-only-mysql-root-password # CI-only dummy
+        run: |
+          mysql -h 127.0.0.1 -u root -e "CREATE DATABASE IF NOT EXISTS mini_store_shadow CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+      - name: Diff migrations against schema.prisma
+        run: >-
+          npx prisma migrate diff
+          --from-migrations prisma/migrations
+          --to-schema-datamodel prisma/schema.prisma
+          --shadow-database-url "$SHADOW_DATABASE_URL"
+          --exit-code

@@ -23,7 +23,6 @@ _(nothing in progress)_
 
 - [ ] #004 — Sale cancellation / refund with stock reversal (BR2, out of scope for v1) [area: backend] → [.tasks/004-sale-cancellation-reversal.md](.tasks/004-sale-cancellation-reversal.md)
 - [ ] #006 — Purge stale sessions, refresh-token reuse detection, shared rate-limit store [area: backend] → [.tasks/006-session-cleanup-and-token-hardening.md](.tasks/006-session-cleanup-and-token-hardening.md)
-- [ ] #007 — CI pipeline: lint, typecheck, unit and e2e tests with a MySQL service [area: infra] → [.tasks/007-ci-pipeline.md](.tasks/007-ci-pipeline.md)
 - [ ] #008 — Dockerfile and deployment setup for the API [area: infra] → [.tasks/008-dockerfile-and-deployment.md](.tasks/008-dockerfile-and-deployment.md)
 - [ ] #009 — Self-service password change for staff [area: backend] → [.tasks/009-self-service-password-change.md](.tasks/009-self-service-password-change.md)
 
@@ -33,6 +32,7 @@ _(nothing in progress)_
 
 - [x] #000 — Initial project setup and template configuration → [.tasks/000-initial-project-setup.md](.tasks/000-initial-project-setup.md)
 - [x] #001 — Backend REST API for the mini-supermarket (NestJS + Fastify, MySQL + Prisma) [area: backend] → [.tasks/001-backend-rest-api.md](.tasks/001-backend-rest-api.md)
+- [x] #007 — CI pipeline: lint, typecheck, unit and e2e tests with a MySQL service [area: infra] → [.tasks/007-ci-pipeline.md](.tasks/007-ci-pipeline.md)
 
 ---
 

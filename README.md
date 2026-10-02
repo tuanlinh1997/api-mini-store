@@ -45,6 +45,10 @@ curl -s -X POST http://localhost:3000/api/v1/auth/login \
 
 Create the databases once: `CREATE DATABASE mini_store CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;` and the same for `mini_store_test`. `docker-compose.yml` provides an optional MySQL 8 service (`mini_store` is created automatically).
 
+## CI
+
+`.github/workflows/ci.yml` runs on pull requests and on pushes to `main`, `master` and `feature/**`: lint + typecheck, unit tests (coverage uploaded as the `unit-coverage` artifact), build, e2e tests against a `mysql:8.0` service container (`mini_store_test`, utf8mb4), and a Prisma migration drift check. All credentials in the workflow are CI-only dummy values. Make the jobs required checks in the branch protection rules.
+
 ## Documentation
 
 | Doc | Content |
